@@ -24,6 +24,13 @@ dependencies = [
     "pydantic>=2.7",
     "pyyaml>=6.0",
     "numpy>=1.26",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg2-binary>=2.9",
+    "redis>=5.0",
+    "celery>=5.4",
+    "httpx>=0.27",
+    "structlog>=24.1",
 ]
 
 [project.optional-dependencies]

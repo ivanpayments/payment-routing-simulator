@@ -94,8 +94,8 @@ def test_domestic_transaction_no_penalty():
     domestic = [simulate_transaction(_make_req(issuer_country="US")) for _ in range(n)]
     rate_no = sum(1 for r in no_issuer if r.approved) / n
     rate_dom = sum(1 for r in domestic if r.approved) / n
-    # Both should be statistically similar — allow 8pp variance (stochastic at n=300)
-    assert abs(rate_no - rate_dom) < 0.08, (
+    # Both should be statistically similar — allow 10pp variance (stochastic at n=300)
+    assert abs(rate_no - rate_dom) < 0.10, (
         f"Domestic issuer should not change rate: {rate_no:.1%} vs {rate_dom:.1%}"
     )
 

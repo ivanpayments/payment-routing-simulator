@@ -162,7 +162,13 @@ def _simulate_3ds(provider_name: str, country: str, amount: float) -> ThreeDSRes
 # Single transaction
 # ---------------------------------------------------------------------------
 
-def simulate_transaction(req: SimulateRequest) -> ProviderResponse:
+def simulate_transaction(req: SimulateRequest, db=None) -> ProviderResponse:
+    """Simulate a single transaction.
+
+    When `db` is provided (SQLAlchemy Session), the transaction is persisted to
+    the database with a full state transition record. When `db` is None (default),
+    the simulator runs in stateless mode — no persistence, same behaviour as before.
+    """
     prob = _approval_probability(req.provider, req)
     approved = random.random() < prob
     latency_ms = _sample_latency(req.provider, req.country)
@@ -183,8 +189,14 @@ def simulate_transaction(req: SimulateRequest) -> ProviderResponse:
     response_message = code_entry[1]
     three_ds = _simulate_3ds(req.provider, req.country, req.amount) if req.use_3ds else None
 
+    txn_id = str(uuid.uuid4())
+
+    # Persist to database when a session is provided
+    if db is not None:
+        _persist_transaction(db, txn_id, req, state, response_code, response_message, latency_ms)
+
     return ProviderResponse(
-        transaction_id=str(uuid.uuid4()),
+        transaction_id=txn_id,
         provider=req.provider,
         state=state,
         approved=approved,
@@ -201,6 +213,47 @@ def simulate_transaction(req: SimulateRequest) -> ProviderResponse:
         issuer_country=req.issuer_country,
         idempotency_key=req.idempotency_key,
     )
+
+
+def _persist_transaction(
+    db,
+    txn_id: str,
+    req: SimulateRequest,
+    state: TransactionState,
+    response_code: str,
+    response_message: str,
+    latency_ms: float,
+) -> None:
+    """Write Transaction + initial StateTransition rows to the database."""
+    from payment_router.db import StateTransition, Transaction
+
+    txn = Transaction(
+        id=txn_id,
+        provider=req.provider,
+        country=req.country,
+        issuer_country=req.issuer_country,
+        card_brand=req.card_brand.value,
+        card_type=req.card_type.value,
+        amount=req.amount,
+        currency=req.currency,
+        state=state.value,
+        response_code=response_code,
+        response_message=response_message,
+        idempotency_key=req.idempotency_key,
+        latency_ms=latency_ms,
+        use_3ds=req.use_3ds,
+    )
+    db.add(txn)
+
+    # pending → authorized/declined
+    record = StateTransition(
+        transaction_id=txn_id,
+        from_state=TransactionState.PENDING.value,
+        to_state=state.value,
+        triggered_by="simulate",
+    )
+    db.add(record)
+    db.commit()
 
 
 # ---------------------------------------------------------------------------
