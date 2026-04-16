@@ -1,0 +1,31 @@
+# Source data — never commit (108K-row CSV, internal)
+Claude files/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtualenv
+.venv/
+venv/
+env/
+
+# Test / lint cache
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp derived profiles (use scripts/derive_profiles.py to regenerate)
+/tmp/
