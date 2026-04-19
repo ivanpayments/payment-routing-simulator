@@ -3,7 +3,7 @@
 Compares two routing strategies on a synthetic transaction book and reports
 the blended approval rate, latency, and per-market breakdown.
 
-Strategy A (baseline): always route to global-acquirer-a
+Strategy A (baseline): always route to global-acquirer
 Strategy B (smart):    route to best provider per merchant country, with
                        soft-decline retry cascade to second-best
 
@@ -77,20 +77,20 @@ CROSS_BORDER_ISSUERS = {
 SMART_ROUTING: dict[str, list[str]] = {
     "US": ["global-acquirer-a", "global-acquirer-b"],
     "CA": ["global-acquirer-a", "global-acquirer-b"],
-    "GB": ["global-acquirer-b", "global-acquirer-a"],
-    "AU": ["global-acquirer-a", "global-acquirer-b"],
-    "DE": ["apm-specialist", "global-acquirer-b"],
-    "FR": ["apm-specialist", "global-acquirer-b"],
-    "NL": ["apm-specialist", "global-acquirer-a"],
-    "BR": ["apm-specialist", "global-acquirer-a"],
-    "MX": ["apm-specialist", "global-acquirer-a"],
-    "IN": ["apm-specialist", "regional-bank"],
-    "SG": ["global-acquirer-b", "fx-cross-border"],
-    "JP": ["global-acquirer-a", "global-acquirer-b"],
-    "AE": ["regional-bank", "global-acquirer-b"],
-    "CO": ["apm-specialist", "global-acquirer-a"],
-    "AR": ["apm-specialist", "global-acquirer-a"],
-    "ZA": ["global-acquirer-a", "fx-cross-border"],
+    "GB": ["regional-bank-processor-b", "global-acquirer-a"],
+    "AU": ["regional-bank-processor-c", "global-acquirer-a"],
+    "DE": ["regional-card-specialist-a", "global-acquirer-a"],
+    "FR": ["regional-card-specialist-a", "global-acquirer-a"],
+    "NL": ["regional-card-specialist-a", "global-acquirer-a"],
+    "BR": ["regional-card-specialist-b", "regional-bank-processor-a"],
+    "MX": ["regional-card-specialist-b", "regional-bank-processor-a"],
+    "IN": ["regional-card-specialist-b", "regional-bank-processor-a"],
+    "SG": ["cross-border-fx-specialist-a", "global-acquirer-a"],
+    "JP": ["cross-border-fx-specialist-a", "global-acquirer-a"],
+    "AE": ["regional-bank-processor-a", "global-acquirer-a"],
+    "CO": ["regional-card-specialist-b", "regional-bank-processor-a"],
+    "AR": ["regional-card-specialist-b", "global-acquirer-b"],
+    "ZA": ["global-acquirer-a", "cross-border-fx-specialist-a"],
 }
 _DEFAULT_SMART = ["global-acquirer-a", "global-acquirer-b"]
 
@@ -174,7 +174,7 @@ def run_benchmark(n: int, seed: int) -> None:
     for txn in transactions:
         c = txn.country
 
-        # Strategy A: always global-acquirer-a
+        # Strategy A: always global-acquirer
         req_a = txn.model_copy(update={"provider": "global-acquirer-a"})
         resp_a = simulate_transaction(req_a)
 

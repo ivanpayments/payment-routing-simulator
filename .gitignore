@@ -29,3 +29,11 @@ Thumbs.db
 
 # Temp derived profiles (use scripts/derive_profiles.py to regenerate)
 /tmp/
+
+# Secrets — per-env, never commit
+.env
+.env.local
+.env.prod
+
+# Local SQLite for dev iteration — Postgres is the real DB
+payment_router.db

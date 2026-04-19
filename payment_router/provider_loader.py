@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Optional
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+_PROVIDER_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,63}$")
 
 
 # ---------------------------------------------------------------------------
@@ -119,16 +122,15 @@ def _providers_dir() -> Path:
 
 
 def load_provider(name: str) -> ProviderProfile:
-    name = name.lower()
+    name = name.lower().strip()
+    if not _PROVIDER_NAME_RE.match(name):
+        raise FileNotFoundError(f"Provider not found. Use GET /providers to list available providers.")
     if name in _cache:
         return _cache[name]
 
     path = _providers_dir() / f"{name}.yaml"
     if not path.exists():
-        available = list_providers()
-        raise FileNotFoundError(
-            f"Provider '{name}' not found. Available: {available}"
-        )
+        raise FileNotFoundError(f"Provider not found. Use GET /providers to list available providers.")
 
     with path.open() as f:
         raw = yaml.safe_load(f)

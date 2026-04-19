@@ -1,0 +1,32 @@
+services:
+
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  kafka:
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://localhost:29092
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,HOST://:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT
+
+  api:
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./payment_router:/app/payment_router
+      - ./scripts:/app/scripts
+    environment:
+      UVICORN_EXTRA_ARGS: "--reload"
+      ENV: local
+
+  worker:
+    volumes:
+      - ./payment_router:/app/payment_router

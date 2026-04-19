@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 680" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+  <style>
+    .box { fill: #fff; stroke: #111; stroke-width: 1.5; }
+    .box-accent { fill: #fff7e6; stroke: #d97706; stroke-width: 1.8; }
+    .box-muted { fill: #f6f6f6; stroke: #888; stroke-width: 1.2; }
+    .label { font-size: 13px; fill: #111; }
+    .sub { font-size: 11px; fill: #555; }
+    .title { font-size: 15px; font-weight: 600; fill: #111; }
+    .section-title { font-size: 12px; fill: #888; font-weight: 600; letter-spacing: 0.08em; }
+    .arrow { fill: none; stroke: #111; stroke-width: 1.4; marker-end: url(#arrow); }
+    .arrow-dash { fill: none; stroke: #888; stroke-width: 1.2; stroke-dasharray: 4 3; marker-end: url(#arrow); }
+    .pill { fill: #fff7e6; stroke: #d97706; stroke-width: 1; }
+    .caption { font-size: 11px; fill: #444; }
+  </style>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,4 L0,8 z" fill="#111"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="20" y="32" class="title">payment-routing-simulator — runtime architecture</text>
+  <text x="20" y="52" class="sub">Every /simulate applies 35 Class-A pattern rules in ~70 µs at p95. Class-B calibration lives in YAML; Class-C sequences live in Postgres + Celery.</text>
+
+  <!-- Client -->
+  <rect x="20" y="80" width="160" height="60" rx="6" class="box"/>
+  <text x="100" y="105" text-anchor="middle" class="title">Client</text>
+  <text x="100" y="125" text-anchor="middle" class="sub">curl / chatbot / CI test</text>
+
+  <!-- Caddy -->
+  <rect x="260" y="80" width="220" height="60" rx="6" class="box"/>
+  <text x="370" y="105" text-anchor="middle" class="title">Caddy (reverse proxy)</text>
+  <text x="370" y="125" text-anchor="middle" class="sub">TLS :443 → handle_path /router/* → :8090</text>
+
+  <!-- FastAPI big box -->
+  <rect x="20" y="180" width="960" height="200" rx="10" class="box-accent"/>
+  <text x="40" y="205" class="section-title">FASTAPI (uvicorn :8090, Docker container)</text>
+
+  <!-- Auth middleware -->
+  <rect x="40" y="220" width="180" height="60" rx="6" class="box"/>
+  <text x="130" y="243" text-anchor="middle" class="label">API key auth</text>
+  <text x="130" y="262" text-anchor="middle" class="sub">SHA-256 hash lookup</text>
+
+  <!-- Idempotency -->
+  <rect x="240" y="220" width="180" height="60" rx="6" class="box"/>
+  <text x="330" y="243" text-anchor="middle" class="label">Idempotency</text>
+  <text x="330" y="262" text-anchor="middle" class="sub">Redis 24h TTL per key</text>
+
+  <!-- Rate limit -->
+  <rect x="440" y="220" width="180" height="60" rx="6" class="box"/>
+  <text x="530" y="243" text-anchor="middle" class="label">Rate limit</text>
+  <text x="530" y="262" text-anchor="middle" class="sub">100 req/min/key · 60/IP</text>
+
+  <!-- Body size -->
+  <rect x="640" y="220" width="180" height="60" rx="6" class="box"/>
+  <text x="730" y="243" text-anchor="middle" class="label">Body size cap</text>
+  <text x="730" y="262" text-anchor="middle" class="sub">1 MB max</text>
+
+  <!-- Engine — split into YAML load, draw, pattern_rules -->
+  <rect x="40" y="300" width="240" height="60" rx="6" class="box"/>
+  <text x="160" y="323" text-anchor="middle" class="label">Engine — YAML loader</text>
+  <text x="160" y="342" text-anchor="middle" class="sub">provider_loader → archetype profile</text>
+
+  <rect x="300" y="300" width="240" height="60" rx="6" class="box"/>
+  <text x="420" y="323" text-anchor="middle" class="label">Probability draws</text>
+  <text x="420" y="342" text-anchor="middle" class="sub">approval · latency · 3DS · decline code</text>
+
+  <rect x="560" y="300" width="260" height="60" rx="6" class="box-accent"/>
+  <text x="690" y="322" text-anchor="middle" class="title">pattern_rules</text>
+  <text x="690" y="340" text-anchor="middle" class="sub">35 Class-A invariants · shared with generator</text>
+
+  <!-- Response -->
+  <rect x="840" y="300" width="140" height="60" rx="6" class="box"/>
+  <text x="910" y="323" text-anchor="middle" class="label">Response</text>
+  <text x="910" y="342" text-anchor="middle" class="sub">JSON out</text>
+
+  <!-- Backing services row -->
+  <text x="20" y="420" class="section-title">BACKING SERVICES (Docker Compose — internal network)</text>
+
+  <rect x="20" y="435" width="220" height="80" rx="6" class="box"/>
+  <text x="130" y="460" text-anchor="middle" class="title">Postgres 16</text>
+  <text x="130" y="482" text-anchor="middle" class="sub">state machine</text>
+  <text x="130" y="500" text-anchor="middle" class="sub">PENDING → AUTHORIZED → …</text>
+
+  <rect x="260" y="435" width="220" height="80" rx="6" class="box"/>
+  <text x="370" y="460" text-anchor="middle" class="title">Redis 7</text>
+  <text x="370" y="482" text-anchor="middle" class="sub">idempotency + rate-limit</text>
+  <text x="370" y="500" text-anchor="middle" class="sub">Celery broker</text>
+
+  <rect x="500" y="435" width="220" height="80" rx="6" class="box"/>
+  <text x="610" y="460" text-anchor="middle" class="title">Kafka (KRaft)</text>
+  <text x="610" y="482" text-anchor="middle" class="sub">payment.events topic</text>
+  <text x="610" y="500" text-anchor="middle" class="sub">fire-and-forget producer</text>
+
+  <rect x="740" y="435" width="220" height="80" rx="6" class="box"/>
+  <text x="850" y="460" text-anchor="middle" class="title">Celery worker</text>
+  <text x="850" y="482" text-anchor="middle" class="sub">HMAC-SHA256 webhooks</text>
+  <text x="850" y="500" text-anchor="middle" class="sub">backoff 1–2–4–8–16 s</text>
+
+  <!-- Arrows -->
+  <path class="arrow" d="M180 110 L260 110"/>
+  <path class="arrow" d="M370 140 L370 175"/>
+  <path class="arrow" d="M130 280 L130 300"/>
+  <path class="arrow" d="M280 330 L300 330"/>
+  <path class="arrow" d="M540 330 L560 330"/>
+  <path class="arrow" d="M820 330 L840 330"/>
+
+  <!-- FastAPI to backing services -->
+  <path class="arrow-dash" d="M160 360 L130 435"/>
+  <path class="arrow-dash" d="M420 360 L370 435"/>
+  <path class="arrow-dash" d="M690 360 L610 435"/>
+
+  <!-- Redis → Celery -->
+  <path class="arrow" d="M480 475 L740 475"/>
+
+  <!-- Celery → external webhook receiver -->
+  <rect x="740" y="560" width="220" height="60" rx="6" class="box-muted"/>
+  <text x="850" y="583" text-anchor="middle" class="label">Merchant webhook URL</text>
+  <text x="850" y="602" text-anchor="middle" class="sub">X-Signature-256 · X-Event-Type</text>
+  <path class="arrow" d="M850 515 L850 560"/>
+
+  <!-- Offline dataset box -->
+  <rect x="20" y="560" width="480" height="90" rx="6" class="box-muted"/>
+  <text x="260" y="585" text-anchor="middle" class="section-title">OFFLINE — DATASET GENERATION (one-shot)</text>
+  <text x="260" y="610" text-anchor="middle" class="label">scripts/generate_routing_transactions.py</text>
+  <text x="260" y="628" text-anchor="middle" class="sub">YAMLs + pattern_rules post-build sweep → routing_transactions.csv (106,739 rows)</text>
+  <text x="260" y="646" text-anchor="middle" class="sub">audit artifact · P3 ML training data · drift detector</text>
+
+  <!-- shared pattern_rules link to offline -->
+  <path class="arrow-dash" d="M560 360 Q 400 480 260 560"/>
+  <text x="360" y="440" class="caption">shared</text>
+</svg>

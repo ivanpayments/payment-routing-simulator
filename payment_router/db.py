@@ -4,7 +4,8 @@ Tables:
     transactions        — one row per simulated/processed transaction
     state_transitions   — full audit trail of every state change
     webhook_deliveries  — delivery log for every webhook attempt
-    webhook_configs     — registered callback URLs (Session 5)
+    webhook_configs     — registered callback URLs
+    api_keys            — API key pairs (publishable + secret hash)
 
 Usage (without Docker — SQLite for local dev):
     export DATABASE_URL=sqlite:///./payment_router.db
@@ -157,6 +158,9 @@ class WebhookDelivery(Base):
     transaction_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("transactions.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    webhook_config_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("webhook_configs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     url: Mapped[str] = mapped_column(String(512), nullable=False)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -171,7 +175,7 @@ class WebhookDelivery(Base):
 
 
 # ---------------------------------------------------------------------------
-# WebhookConfig — registered callback endpoints (used by Session 5)
+# WebhookConfig — registered merchant callback URLs
 # ---------------------------------------------------------------------------
 
 class WebhookConfig(Base):
@@ -179,8 +183,25 @@ class WebhookConfig(Base):
 
     id: Mapped[str] = _uuid_column()
     url: Mapped[str] = mapped_column(String(512), nullable=False)
-    events: Mapped[str] = mapped_column(Text, nullable=False)  # JSON list of event types
-    secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256 of secret
+    events: Mapped[str] = mapped_column(Text, nullable=False)  # JSON-encoded list of event type strings
+    secret: Mapped[str] = mapped_column(String(128), nullable=False)  # plaintext — used to sign payloads
+    active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+# ---------------------------------------------------------------------------
+# ApiKey — publishable + secret key pairs for API authentication
+# ---------------------------------------------------------------------------
+
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id: Mapped[str] = _uuid_column()
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    publishable_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    secret_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

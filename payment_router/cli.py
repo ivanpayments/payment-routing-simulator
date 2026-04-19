@@ -185,7 +185,7 @@ def route(
     Tries providers left to right. On a soft decline (retryable) it cascades
     to the next provider. On approval or hard decline it stops.
 
-    Example: payment-router route -p global-acquirer-a -p regional-bank -c BR -a 300
+    Example: payment-router route -p global-acquirer-a -p regional-bank-processor-a -c BR -a 300
     """
     from payment_router.engine import simulate_with_retry
     from payment_router.models import CardBrand, CardType, SimulateRequest

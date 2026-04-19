@@ -1,0 +1,95 @@
+{
+  "hero": {
+    "uptitle": "Payments infrastructure",
+    "h1": "A mock payment gateway for integration engineers shipping multi-PSP setups",
+    "sub": "Sandboxes return the response the caller asks for. This one returns the response a merchant would actually see in production — real decline codes, 3DS flows, latency, webhook delivery",
+    "install_command": "pip install payment-routing-simulator",
+    "stats": [
+      { "k": "Processor archetypes", "v": "5" },
+      { "k": "Synthetic transaction rows", "v": "10,000" },
+      { "k": "Python package", "v": "On PyPI" }
+    ]
+  },
+  "section_what": {
+    "label": "What it is",
+    "heading": "One tool that emulates five kinds of payment processors",
+    "body": "A Python package and REST API that models five processor archetypes — global acquirer, regional bank processor, APM specialist, cross-border FX specialist, high-risk / orchestrator. Each has its own approval rates, decline codes, latency, 3DS behaviour and fees, fitted from a 10,000-row synthetic dataset"
+  },
+  "section_why": {
+    "label": "The problem it solves",
+    "heading": "Test environments don't reflect production, so routing bugs show up when customers complain",
+    "body": "",
+    "points": [
+      "<b>Stripe's test mode always approves.</b> You cannot ask \"what happens when a global acquirer soft-declines a Brazilian Visa at $300?\" — the sandbox is not wired to answer it",
+      "<b>Every processor's sandbox behaves differently.</b> Regression-testing routing logic across four or five providers means maintaining four or five test harnesses",
+      "<b>Edge cases only surface in production.</b> 3DS challenges, country-specific declines, soft-decline retries, webhook races — none reproduce in sandbox"
+    ]
+  },
+  "section_who": {
+    "label": "Who it's for",
+    "heading": "Integration engineers at merchants, and QA teams shipping routing changes",
+    "body": "Primary user: an integration engineer evaluating or maintaining a multi-PSP setup. Also useful for PSP solutions engineers, product managers comparing providers, and data engineers generating training data for retry models"
+  },
+  "section_what_it_does": {
+    "label": "What the API returns",
+    "heading": "Three things the sandboxes don't",
+    "heading_lead": "Each capability is a concrete transaction path you can hit from the command line or a test suite",
+    "points": [
+      "<b>Realistic decline codes by country and brand.</b> A Brazilian Visa at $300 on the global-acquirer archetype returns ISO 8583 code 05 at the frequency that archetype actually returns it — not a 200 OK",
+      "<b>Full payment state machine in Postgres.</b> PENDING to AUTHORIZED to CAPTURED or VOIDED to REFUNDED, strictly validated. Capturing a declined transaction returns 409 with the valid next states",
+      "<b>HMAC-signed webhooks that survive restarts.</b> Register URL + secret; events fire with X-Signature-256 and retry on 1-2-4-8-16s backoff. Duplicate requests hit a Redis idempotency cache"
+    ]
+  },
+  "section_how_to_use": {
+    "label": "Try it yourself",
+    "heading": "Install it, hit the endpoint",
+    "body": "Three lines gets you a running simulator plus one comparison call:",
+    "code": "pip install payment-routing-simulator\nprs serve &\ncurl -X POST localhost:8080/api/compare -d '{\"country\":\"BR\",\"brand\":\"visa\",\"amount\":300}'"
+  },
+  "section_case_study": {
+    "label": "Run the replay",
+    "heading": "Run the included replay on a committed dataset in 30 seconds",
+    "body": "One script replays a $50M synthetic DTC apparel book through two routing configs — a single global-acquirer baseline, and a per-corridor archetype selection with soft-decline cascade, network tokens, and EEA SCA exemptions. The CSV is committed, so the output is identical on every run. Full decomposition, pattern IDs, and SQL in <code>case_study.pdf</code>",
+    "run_command": "git clone github.com/ivanpayments/payment-routing-simulator && python scripts/run_case_study.py",
+    "pull_quote": "+2.3 pp authorization, 22% soft-decline salvage within 24 hours, -18 bps effective fee. Every number traces to a CSV column",
+    "stats": [
+      { "k": "Book GMV replayed", "v": "$50M" },
+      { "k": "Replay wall-clock time", "v": "30 s" },
+      { "k": "Data source", "v": "10k-row synthetic CSV" }
+    ]
+  },
+  "section_howbuilt": {
+    "label": "Stack",
+    "heading": "FastAPI in front of Postgres, Redis, Kafka and Celery, behind Caddy",
+    "body_part1": "FastAPI validates the API key, checks Redis for idempotency, and passes a sliding-window rate limit. The engine loads archetype YAML, samples approval against country and brand modifiers, and draws latency from a log-normal fit. Every state transition writes to Postgres and publishes to Kafka. Celery workers HMAC-sign the payload and post with exponential backoff",
+    "body_part2": "The chatbot at <a href=\"/chatbot/\">ivanantonov.com/chatbot</a> calls this simulator's <code>/recommend-route</code> endpoint to rank archetypes by expected approval, latency and fee",
+    "links": [
+      { "label": "GitHub repo", "href": "https://github.com/ivanpayments/payment-routing-simulator" },
+      { "label": "PyPI package", "href": "https://pypi.org/project/payment-routing-simulator/" },
+      { "label": "OpenAPI docs", "href": "/routing-simulator/api/docs" }
+    ]
+  },
+  "byline": "Built by Ivan Antonov — ex-ING Payments PM, Yuno payment-ops strategy",
+  "cta": {
+    "text": "Read the OpenAPI docs",
+    "arrow": "→",
+    "primary_href": "/routing-simulator/api/docs",
+    "secondary_text": "pip install payment-routing-simulator",
+    "secondary_href": "https://pypi.org/project/payment-routing-simulator/"
+  },
+  "right_panel": {
+    "status_pill": "● Live",
+    "title": "Compare archetypes",
+    "subtitle": "Pick a comparison to see the request and the ranked response the live /api/compare endpoint returns",
+    "chips_label": "Try a comparison",
+    "chips": [
+      { "archetype_pair": "Global-acquirer vs regional-bank-processor", "request": "Mexican MasterCard debit at $500" },
+      { "archetype_pair": "APM-specialist", "request": "Brazilian PIX payment at R$300" },
+      { "archetype_pair": "Cross-border-FX-specialist vs global-acquirer", "request": "USD→EUR Visa at $120" },
+      { "archetype_pair": "High-risk-orchestrator", "request": "US Visa $2,500 with 3DS v2.2 challenge" },
+      { "archetype_pair": "Soft-decline cascade: global-acquirer → regional-bank-processor", "request": "Code 05 on BR Visa $300" },
+      { "archetype_pair": "Webhook delivery race", "request": "Idempotency key hit on duplicate /simulate within 3s" },
+      { "archetype_pair": "Commercial-card Level-3 vs Level-2 capture", "request": "US Visa $1,200 corporate card with Level-3 line-item data" }
+    ]
+  }
+}

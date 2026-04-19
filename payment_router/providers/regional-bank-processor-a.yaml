@@ -1,0 +1,129 @@
+name: regional-bank-processor-a
+display_name: Regional Bank Processor A
+base_approval_rate: 0.82
+
+latency:
+  p50_ms: 280
+  p95_ms: 780
+  p99_ms: 1400
+
+three_ds:
+  challenge_rate: 0.45
+  frictionless_rate: 0.55
+  version_2_2_rate: 0.55
+
+card_type_modifiers:
+  credit: 1.00
+  debit: 0.97
+  prepaid: 0.80
+  commercial: 0.96
+
+decline_codes:
+  - code: "05"
+    weight: 45.0
+  - code: "51"
+    weight: 18.0
+  - code: "54"
+    weight: 7.0
+  - code: "14"
+    weight: 5.0
+  - code: "13"
+    weight: 5.0
+  - code: "57"
+    weight: 4.0
+  - code: "RC"
+    weight: 5.0
+  - code: "91"
+    weight: 5.0
+  - code: "61"
+    weight: 6.0
+
+supported_currencies:
+  - USD
+  - BRL
+  - MXN
+  - COP
+  - CLP
+  - PEN
+  - ARS
+
+amount_modifier_thresholds:
+  "100": 1.00
+  "500": 0.98
+  "1000": 0.95
+  "5000": 0.89
+
+countries:
+  BR:
+    base: 0.89
+    card_modifiers:
+      amex: 0.96
+      mastercard: 1.02
+      visa: 1.00
+    three_ds:
+      challenge_rate: 0.48
+      frictionless_rate: 0.52
+  MX:
+    base: 0.84
+    card_modifiers:
+      amex: 1.01
+      mastercard: 1.00
+      visa: 1.00
+    three_ds:
+      challenge_rate: 0.38
+      frictionless_rate: 0.62
+  CO:
+    base: 0.81
+    card_modifiers:
+      mastercard: 1.03
+      visa: 0.99
+    three_ds:
+      challenge_rate: 0.50
+      frictionless_rate: 0.50
+  CL:
+    base: 0.83
+    card_modifiers:
+      mastercard: 1.01
+      visa: 0.99
+    three_ds:
+      challenge_rate: 0.44
+      frictionless_rate: 0.56
+  PE:
+    base: 0.78
+    card_modifiers:
+      mastercard: 1.08
+      visa: 0.98
+    three_ds:
+      challenge_rate: 0.58
+      frictionless_rate: 0.42
+  AR:
+    base: 0.72
+    card_modifiers:
+      amex: 0.90
+      mastercard: 1.09
+      visa: 0.93
+    three_ds:
+      challenge_rate: 0.55
+      frictionless_rate: 0.45
+  US:
+    base: 0.62
+    card_modifiers:
+      amex: 0.95
+      mastercard: 1.00
+      visa: 1.00
+  GB:
+    base: 0.65
+    card_modifiers:
+      mastercard: 1.00
+      visa: 1.00
+  DE:
+    base: 0.63
+    card_modifiers:
+      mastercard: 0.99
+      visa: 1.00
+  AE:
+    base: 0.68
+    card_modifiers:
+      amex: 1.02
+      mastercard: 1.00
+      visa: 1.00

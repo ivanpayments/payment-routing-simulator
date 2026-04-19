@@ -11,10 +11,10 @@ def setup_function():
 def test_list_providers_returns_list():
     providers = list_providers()
     assert isinstance(providers, list)
-    assert len(providers) >= 2  # at least global-acquirer-a + global-acquirer-b
+    assert len(providers) >= 5
 
 
-def test_load_stripe():
+def test_load_global_acquirer_a():
     p = load_provider("global-acquirer-a")
     assert p.name == "global-acquirer-a"
     assert 0 < p.base_approval_rate < 1
@@ -22,9 +22,9 @@ def test_load_stripe():
     assert len(p.decline_codes) > 0
 
 
-def test_load_adyen():
-    p = load_provider("global-acquirer-b")
-    assert p.name == "global-acquirer-b"
+def test_load_regional_bank_processor_b():
+    p = load_provider("regional-bank-processor-b")
+    assert p.name == "regional-bank-processor-b"
     assert 0 <= p.three_ds.challenge_rate <= 1.0
 
 

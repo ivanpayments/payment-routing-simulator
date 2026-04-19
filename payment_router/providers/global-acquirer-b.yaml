@@ -1,40 +1,42 @@
 name: global-acquirer-b
 display_name: Global Acquirer B
-base_approval_rate: 0.86
+base_approval_rate: 0.85
 
 latency:
-  p50_ms: 316
-  p95_ms: 981
-  p99_ms: 1580
+  p50_ms: 230
+  p95_ms: 520
+  p99_ms: 900
 
 three_ds:
-  challenge_rate: 0.20
-  frictionless_rate: 0.80
-  version_2_2_rate: 0.82
+  challenge_rate: 0.28
+  frictionless_rate: 0.72
+  version_2_2_rate: 0.76
 
 card_type_modifiers:
   credit: 1.00
-  debit: 0.96
-  prepaid: 0.85
-  commercial: 0.99
+  debit: 0.97
+  prepaid: 0.86
+  commercial: 0.98
 
 decline_codes:
   - code: "05"
-    weight: 40.9
+    weight: 35.0
   - code: "51"
-    weight: 39.0
-  - code: "57"
-    weight: 7.1
-  - code: "65"
-    weight: 3.3
-  - code: "14"
-    weight: 2.5
-  - code: "54"
-    weight: 2.5
-  - code: "92"
-    weight: 2.4
+    weight: 25.0
   - code: "61"
-    weight: 2.4
+    weight: 8.0
+  - code: "62"
+    weight: 6.0
+  - code: "54"
+    weight: 5.0
+  - code: "14"
+    weight: 5.0
+  - code: "41"
+    weight: 5.0
+  - code: "91"
+    weight: 6.0
+  - code: "RC"
+    weight: 5.0
 
 supported_currencies:
   - USD
@@ -48,307 +50,194 @@ supported_currencies:
   - SGD
   - JPY
   - AED
-  - CHF
-  - SEK
-  - NOK
-  - DKK
 
 amount_modifier_thresholds:
   "100": 1.00
   "500": 0.99
-  "1000": 0.98
-  "5000": 0.96
+  "1000": 0.97
+  "5000": 0.94
 
 countries:
-  AE:
-    base: 0.82
+  US:
+    base: 0.90
     card_modifiers:
-      amex: 0.91
-      mastercard: 1.01
-      visa: 1.01
-    three_ds:
-      challenge_rate: 0.38
-      frictionless_rate: 0.62
-      version_2_2_rate: 0.82
-  AR:
-    base: 0.75
-    card_modifiers:
-      mastercard: 1.03
-      visa: 0.99
-    three_ds:
-      challenge_rate: 0.44
-      frictionless_rate: 0.56
-      version_2_2_rate: 0.82
-  AU:
-    base: 0.89
-    card_modifiers:
-      amex: 0.94
-      mastercard: 1.01
-      visa: 1.00
-    three_ds:
-      challenge_rate: 0.26
-      frictionless_rate: 0.74
-      version_2_2_rate: 0.82
-  BR:
-    base: 0.82
-    card_modifiers:
-      amex: 1.00
+      amex: 1.01
       mastercard: 1.00
       visa: 1.00
     three_ds:
-      challenge_rate: 0.48
-      frictionless_rate: 0.52
-      version_2_2_rate: 0.82
+      challenge_rate: 0.15
+      frictionless_rate: 0.85
+      version_2_2_rate: 0.76
   CA:
     base: 0.88
     card_modifiers:
-      amex: 1.09
-      mastercard: 0.98
-      visa: 1.01
-    three_ds:
-      challenge_rate: 0.34
-      frictionless_rate: 0.66
-      version_2_2_rate: 0.82
-  CL:
-    base: 0.91
-    card_modifiers:
-      mastercard: 1.04
-      visa: 0.97
-    three_ds:
-      challenge_rate: 0.51
-      frictionless_rate: 0.49
-      version_2_2_rate: 0.82
-  CN:
-    base: 0.83
-    three_ds:
-      challenge_rate: 0.43
-      frictionless_rate: 0.57
-      version_2_2_rate: 0.82
-  CO:
-    base: 0.92
-    card_modifiers:
-      amex: 0.99
-      mastercard: 0.98
-      visa: 1.01
-    three_ds:
-      challenge_rate: 0.45
-      frictionless_rate: 0.55
-      version_2_2_rate: 0.82
-  DE:
-    base: 0.82
-    card_modifiers:
-      amex: 0.87
-      mastercard: 1.01
-      visa: 1.01
-    three_ds:
-      challenge_rate: 0.11
-      frictionless_rate: 0.89
-      version_2_2_rate: 0.82
-  EG:
-    base: 0.84
-    card_modifiers:
-      mastercard: 1.04
-      visa: 1.01
-    three_ds:
-      challenge_rate: 0.47
-      frictionless_rate: 0.53
-      version_2_2_rate: 0.82
-  ES:
-    base: 0.82
-    card_modifiers:
-      amex: 0.85
-      mastercard: 0.99
-      visa: 1.04
-    three_ds:
-      challenge_rate: 0.13
-      frictionless_rate: 0.87
-      version_2_2_rate: 0.82
-  FR:
-    base: 0.82
-    card_modifiers:
-      amex: 0.95
+      amex: 1.00
       mastercard: 1.00
       visa: 1.00
+    three_ds:
+      challenge_rate: 0.18
+      frictionless_rate: 0.82
+      version_2_2_rate: 0.76
   GB:
-    base: 0.89
+    base: 0.88
+    card_modifiers:
+      amex: 0.99
+      mastercard: 1.01
+      visa: 1.00
+    three_ds:
+      challenge_rate: 0.24
+      frictionless_rate: 0.76
+      version_2_2_rate: 0.76
+  DE:
+    base: 0.83
     card_modifiers:
       amex: 0.97
-      mastercard: 1.01
+      mastercard: 0.99
       visa: 1.01
     three_ds:
-      challenge_rate: 0.14
-      frictionless_rate: 0.86
-      version_2_2_rate: 0.82
-  HK:
-    base: 0.87
+      challenge_rate: 0.22
+      frictionless_rate: 0.78
+      version_2_2_rate: 0.76
+  FR:
+    base: 0.83
     card_modifiers:
-      amex: 1.06
-      mastercard: 1.09
-      visa: 0.95
-    three_ds:
-      challenge_rate: 0.28
-      frictionless_rate: 0.72
-      version_2_2_rate: 0.82
-  ID:
-    base: 0.81
-    card_modifiers:
-      mastercard: 1.04
-      visa: 1.01
+      amex: 0.93
+      mastercard: 1.00
+      visa: 1.00
     three_ds:
       challenge_rate: 0.26
       frictionless_rate: 0.74
-      version_2_2_rate: 0.82
-  IE:
-    base: 0.80
-    card_modifiers:
-      mastercard: 0.95
-      visa: 0.99
-    three_ds:
-      challenge_rate: 0.11
-      frictionless_rate: 0.89
-      version_2_2_rate: 0.82
-  IN:
-    base: 0.87
-    card_modifiers:
-      amex: 1.03
-      mastercard: 1.05
-      visa: 1.00
-    three_ds:
-      challenge_rate: 0.31
-      frictionless_rate: 0.69
-      version_2_2_rate: 0.82
-  IT:
-    base: 0.83
-    card_modifiers:
-      amex: 0.87
-      mastercard: 1.05
-      visa: 0.99
-    three_ds:
-      challenge_rate: 0.12
-      frictionless_rate: 0.88
-      version_2_2_rate: 0.82
-  JP:
-    base: 0.90
-    card_modifiers:
-      amex: 0.93
-      mastercard: 1.00
-      visa: 1.01
-    three_ds:
-      challenge_rate: 0.31
-      frictionless_rate: 0.69
-      version_2_2_rate: 0.82
-  MX:
-    base: 0.88
-    card_modifiers:
-      amex: 0.99
-      mastercard: 1.02
-      visa: 0.98
-    three_ds:
-      challenge_rate: 0.36
-      frictionless_rate: 0.64
-      version_2_2_rate: 0.82
-  MY:
-    base: 0.89
-    card_modifiers:
-      amex: 0.93
-      mastercard: 1.02
-      visa: 1.01
-    three_ds:
-      challenge_rate: 0.50
-      frictionless_rate: 0.50
-      version_2_2_rate: 0.82
+      version_2_2_rate: 0.76
   NL:
-    base: 0.83
-    card_modifiers:
-      amex: 0.95
-      mastercard: 1.01
-      visa: 0.99
-    three_ds:
-      challenge_rate: 0.13
-      frictionless_rate: 0.87
-      version_2_2_rate: 0.82
-  PE:
-    base: 0.91
-    card_modifiers:
-      mastercard: 0.96
-      visa: 1.02
-    three_ds:
-      challenge_rate: 0.47
-      frictionless_rate: 0.53
-      version_2_2_rate: 0.82
-  PH:
-    base: 0.88
-    card_modifiers:
-      mastercard: 0.95
-      visa: 1.05
-    three_ds:
-      challenge_rate: 0.37
-      frictionless_rate: 0.63
-      version_2_2_rate: 0.82
-  PL:
-    base: 0.88
-    card_modifiers:
-      amex: 0.93
-      mastercard: 0.94
-      visa: 1.05
-    three_ds:
-      challenge_rate: 0.08
-      frictionless_rate: 0.92
-      version_2_2_rate: 0.82
-  SA:
     base: 0.84
     card_modifiers:
-      amex: 0.88
-      mastercard: 1.07
-      visa: 0.96
+      amex: 0.98
+      mastercard: 1.04
+      visa: 0.97
     three_ds:
-      challenge_rate: 0.29
-      frictionless_rate: 0.71
-      version_2_2_rate: 0.82
-  SE:
-    base: 0.85
+      challenge_rate: 0.20
+      frictionless_rate: 0.80
+      version_2_2_rate: 0.76
+  ES:
+    base: 0.84
     card_modifiers:
-      mastercard: 1.01
-      visa: 0.99
+      amex: 1.02
+      mastercard: 0.99
+      visa: 1.01
     three_ds:
-      challenge_rate: 0.12
-      frictionless_rate: 0.88
-      version_2_2_rate: 0.82
-  SG:
-    base: 0.88
+      challenge_rate: 0.20
+      frictionless_rate: 0.80
+      version_2_2_rate: 0.76
+  IT:
+    base: 0.84
     card_modifiers:
       amex: 1.00
       mastercard: 1.00
+      visa: 0.99
+    three_ds:
+      challenge_rate: 0.20
+      frictionless_rate: 0.80
+      version_2_2_rate: 0.76
+  AU:
+    base: 0.86
+    card_modifiers:
+      amex: 1.05
+      mastercard: 0.99
+      visa: 0.99
+    three_ds:
+      challenge_rate: 0.24
+      frictionless_rate: 0.76
+      version_2_2_rate: 0.76
+  SG:
+    base: 0.83
+    card_modifiers:
+      amex: 1.02
+      mastercard: 1.00
+      visa: 0.99
+  JP:
+    base: 0.86
+    card_modifiers:
+      amex: 1.05
+      mastercard: 1.01
+      visa: 0.98
+    three_ds:
+      challenge_rate: 0.32
+      frictionless_rate: 0.68
+      version_2_2_rate: 0.76
+  BR:
+    base: 0.79
+    card_modifiers:
+      amex: 1.00
+      mastercard: 1.00
+      visa: 0.99
+    three_ds:
+      challenge_rate: 0.50
+      frictionless_rate: 0.50
+      version_2_2_rate: 0.76
+  MX:
+    base: 0.80
+    card_modifiers:
+      amex: 0.98
+      mastercard: 1.00
+      visa: 1.00
+    three_ds:
+      challenge_rate: 0.36
+      frictionless_rate: 0.64
+      version_2_2_rate: 0.76
+  IN:
+    base: 0.78
+    card_modifiers:
+      amex: 1.02
+      mastercard: 1.02
+      visa: 0.97
+    three_ds:
+      challenge_rate: 0.40
+      frictionless_rate: 0.60
+      version_2_2_rate: 0.76
+  AE:
+    base: 0.84
+    card_modifiers:
+      amex: 0.97
+      mastercard: 1.01
       visa: 1.00
     three_ds:
       challenge_rate: 0.33
       frictionless_rate: 0.67
-      version_2_2_rate: 0.82
-  TH:
-    base: 0.84
+      version_2_2_rate: 0.76
+  AR:
+    base: 0.68
     card_modifiers:
-      mastercard: 1.01
+      amex: 0.91
+      mastercard: 1.06
+      visa: 0.94
+    three_ds:
+      challenge_rate: 0.48
+      frictionless_rate: 0.52
+      version_2_2_rate: 0.76
+  CO:
+    base: 0.76
+    card_modifiers:
+      mastercard: 1.03
+      visa: 0.99
+    three_ds:
+      challenge_rate: 0.46
+      frictionless_rate: 0.54
+      version_2_2_rate: 0.76
+  PL:
+    base: 0.82
+    card_modifiers:
+      mastercard: 1.09
+      visa: 0.97
+    three_ds:
+      challenge_rate: 0.18
+      frictionless_rate: 0.82
+      version_2_2_rate: 0.76
+  ZA:
+    base: 0.79
+    card_modifiers:
+      mastercard: 0.95
       visa: 1.01
     three_ds:
       challenge_rate: 0.36
       frictionless_rate: 0.64
-      version_2_2_rate: 0.82
-  US:
-    base: 0.87
-    card_modifiers:
-      amex: 1.00
-      mastercard: 1.00
-      visa: 1.01
-    three_ds:
-      challenge_rate: 0.09
-      frictionless_rate: 0.91
-      version_2_2_rate: 0.82
-  ZA:
-    base: 0.85
-    card_modifiers:
-      mastercard: 0.94
-      visa: 1.06
-    three_ds:
-      challenge_rate: 0.38
-      frictionless_rate: 0.62
-      version_2_2_rate: 0.82
+      version_2_2_rate: 0.76

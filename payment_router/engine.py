@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import random
 import uuid
 from collections import Counter
@@ -24,8 +25,13 @@ from payment_router.models import (
     TransactionState,
 )
 from payment_router.issuer_tiers import issuer_modifier
+from payment_router.pattern_rules import RuleContext, RuleResult, apply_rule_chain, is_retryable
 from payment_router.provider_loader import list_providers, load_provider
 from payment_router.response_codes import ISO_8583_CODES, is_soft_decline
+
+
+# Feature flag: allow A/B perf comparison. Default True.
+APPLY_PATTERN_RULES = os.environ.get("APPLY_PATTERN_RULES", "1") not in ("0", "false", "False", "")
 
 
 # ---------------------------------------------------------------------------
@@ -165,9 +171,13 @@ def _simulate_3ds(provider_name: str, country: str, amount: float) -> ThreeDSRes
 def simulate_transaction(req: SimulateRequest, db=None) -> ProviderResponse:
     """Simulate a single transaction.
 
-    When `db` is provided (SQLAlchemy Session), the transaction is persisted to
-    the database with a full state transition record. When `db` is None (default),
-    the simulator runs in stateless mode — no persistence, same behaviour as before.
+    Pipeline (2026-04-19 refactor):
+      1. YAML probability draw (distributional — unchanged).
+      2. Class-A pattern rule chain (pattern_rules.apply_rule_chain).
+      3. Re-draw approved flag if rules added an approval-probability adjust.
+      4. Construct ProviderResponse with rules_applied audit list.
+
+    When `db` is provided (SQLAlchemy Session), the transaction is persisted.
     """
     prob = _approval_probability(req.provider, req)
     approved = random.random() < prob
@@ -188,6 +198,54 @@ def simulate_transaction(req: SimulateRequest, db=None) -> ProviderResponse:
     code_entry = ISO_8583_CODES.get(response_code, ("unknown", "Unknown response code", False))
     response_message = code_entry[1]
     three_ds = _simulate_3ds(req.provider, req.country, req.amount) if req.use_3ds else None
+
+    # -------------------------------------------------------------------
+    # Class-A pattern rule chain
+    # -------------------------------------------------------------------
+    rules_applied: list[str] = []
+    if APPLY_PATTERN_RULES:
+        ctx = RuleContext.from_request(req)
+        rr = RuleResult(
+            approved=approved,
+            response_code=response_code,
+            response_message=response_message,
+            merchant_advice_code=merchant_advice_code,
+            three_ds_requested=bool(three_ds),
+            three_ds_version=three_ds.version.value if three_ds else None,
+            three_ds_eci=three_ds.eci if three_ds else None,
+            three_ds_challenged=three_ds.challenged if three_ds else None,
+        )
+        apply_rule_chain(ctx, rr)
+        rules_applied = list(rr.applied)
+
+        # If a rule hard-rejected (CC087), commit that outcome.
+        if rr.rejected_by_rule is not None:
+            approved = rr.approved
+            response_code = rr.response_code
+            response_message = rr.response_message
+            merchant_advice_code = rr.merchant_advice_code
+            state = TransactionState.DECLINED
+            three_ds = None  # rejected before 3DS settles
+        else:
+            # Re-draw approved if rules adjusted the probability.
+            if rr.approval_prob_adjust != 0.0:
+                new_prob = max(0.0, min(0.99, prob + rr.approval_prob_adjust))
+                # Use a fresh draw so the rules-on path meaningfully differs
+                # from rules-off where appropriate.
+                approved = random.random() < new_prob
+                if approved:
+                    response_code = "00"
+                    response_message = "Approved"
+                    merchant_advice_code = None
+                    state = TransactionState.AUTHORIZED
+                else:
+                    state = TransactionState.DECLINED
+
+            # Reflect the rule-adjusted 3DS state back into ThreeDSResult.
+            if three_ds is not None and not rr.three_ds_requested:
+                three_ds = None
+            elif three_ds is not None and rr.three_ds_eci and rr.three_ds_eci != three_ds.eci:
+                three_ds = three_ds.model_copy(update={"eci": rr.three_ds_eci})
 
     txn_id = str(uuid.uuid4())
 
@@ -212,6 +270,12 @@ def simulate_transaction(req: SimulateRequest, db=None) -> ProviderResponse:
         three_ds=three_ds,
         issuer_country=req.issuer_country,
         idempotency_key=req.idempotency_key,
+        rules_applied=rules_applied,
+        present_mode=req.present_mode,
+        is_mit=bool(req.is_mit or req.is_recurring),
+        is_recurring=bool(req.is_recurring),
+        network_token_present=bool(req.network_token_present),
+        bin_first6=req.bin_first6,
     )
 
 
@@ -224,8 +288,21 @@ def _persist_transaction(
     response_message: str,
     latency_ms: float,
 ) -> None:
-    """Write Transaction + initial StateTransition rows to the database."""
+    """Write Transaction + initial StateTransition rows to the database.
+
+    If an idempotency_key is provided and already exists, skips the insert
+    silently — the caller will use the txn_id from the existing row via
+    the idempotency middleware (Session 6). This prevents IntegrityError 500s.
+    """
+    from sqlalchemy import select
     from payment_router.db import StateTransition, Transaction
+
+    if req.idempotency_key:
+        existing = db.execute(
+            select(Transaction).where(Transaction.idempotency_key == req.idempotency_key)
+        ).scalar_one_or_none()
+        if existing is not None:
+            return
 
     txn = Transaction(
         id=txn_id,
@@ -291,8 +368,19 @@ def simulate_with_retry(
         if response.approved:
             break   # success — done
 
-        if not soft:
-            break   # hard decline — retrying won't help
+        # Pattern-rule gate: RC005/RC008/RC019/RC020/RC026/RC033.
+        # soft=False short-circuits anyway; is_retryable adds MAC 01/02,
+        # risk_skip, MIT, and APM gates.
+        if not is_retryable(
+            response.response_code,
+            is_soft=soft,
+            card_brand=response.card_brand.value if hasattr(response.card_brand, "value") else str(response.card_brand),
+            mastercard_advice_code=response.merchant_advice_code,
+            risk_skip_flag=False,
+            is_mit=bool(response.is_mit),
+            payment_method_is_card=True,
+        ):
+            break   # rule-gated — stop cascade
 
         # soft decline → cascade to next provider
 

@@ -40,6 +40,22 @@ def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 
+# Seed the hardcoded test API key into the in-memory DB so auth works in tests.
+from payment_router.db import ApiKey
+from payment_router.api_keys import hash_key
+
+_TEST_SK = "sk_test_SEED_LOCAL_DEV_ONLY"
+_TEST_PK = "pk_test_SEED_LOCAL_DEV_ONLY"
+_AUTH = {"Authorization": f"Bearer {_TEST_SK}"}
+
+with Session(test_engine) as _db:
+    _db.add(ApiKey(
+        name="test-default",
+        publishable_key=_TEST_PK,
+        secret_hash=hash_key(_TEST_SK),
+    ))
+    _db.commit()
+
 client = TestClient(app)
 
 
@@ -148,7 +164,7 @@ def _simulate_and_get_id(approved: bool = True) -> str | None:
             "country": "US",
             "card_brand": "visa",
             "amount": 100.0,
-        })
+        }, headers=_AUTH)
         assert resp.status_code == 200
         data = resp.json()
         if data["approved"] == approved:
@@ -162,7 +178,7 @@ def test_api_simulate_persists_transaction():
         "country": "US",
         "card_brand": "visa",
         "amount": 100.0,
-    })
+    }, headers=_AUTH)
     assert resp.status_code == 200
     txn_id = resp.json()["transaction_id"]
 
@@ -175,11 +191,11 @@ def test_api_full_lifecycle_authorize_capture_refund():
     txn_id = _simulate_and_get_id(approved=True)
     assert txn_id is not None, "Could not get an approved transaction in 20 tries"
 
-    cap = client.post(f"/capture/{txn_id}")
+    cap = client.post(f"/capture/{txn_id}", headers=_AUTH)
     assert cap.status_code == 200
     assert cap.json()["state"] == "captured"
 
-    ref = client.post(f"/refund/{txn_id}")
+    ref = client.post(f"/refund/{txn_id}", headers=_AUTH)
     assert ref.status_code == 200
     assert ref.json()["state"] == "refunded"
 
@@ -188,7 +204,7 @@ def test_api_full_lifecycle_authorize_void():
     txn_id = _simulate_and_get_id(approved=True)
     assert txn_id is not None
 
-    void = client.post(f"/void/{txn_id}")
+    void = client.post(f"/void/{txn_id}", headers=_AUTH)
     assert void.status_code == 200
     assert void.json()["state"] == "voided"
 
@@ -198,7 +214,7 @@ def test_api_invalid_transition_returns_409():
     assert txn_id is not None
 
     # Try to refund without capturing → 409
-    resp = client.post(f"/refund/{txn_id}")
+    resp = client.post(f"/refund/{txn_id}", headers=_AUTH)
     assert resp.status_code == 409
 
 
@@ -207,7 +223,7 @@ def test_api_declined_transaction_cannot_be_captured():
     if txn_id is None:
         pytest.skip("Could not get a declined transaction in 20 tries")
 
-    resp = client.post(f"/capture/{txn_id}")
+    resp = client.post(f"/capture/{txn_id}", headers=_AUTH)
     assert resp.status_code == 409
 
 
@@ -215,7 +231,7 @@ def test_api_transaction_transitions_history():
     txn_id = _simulate_and_get_id(approved=True)
     assert txn_id is not None
 
-    client.post(f"/capture/{txn_id}")
+    client.post(f"/capture/{txn_id}", headers=_AUTH)
 
     resp = client.get(f"/transactions/{txn_id}/transitions")
     assert resp.status_code == 200

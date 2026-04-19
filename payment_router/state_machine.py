@@ -14,7 +14,32 @@ Every transition is persisted as a StateTransition row for full audit history.
 
 from __future__ import annotations
 
+import os
+import socket
+from datetime import datetime, timezone
+
 from payment_router.models import TransactionState
+
+_redis_checked: bool = False
+_redis_ok: bool = False
+
+
+def _redis_reachable() -> bool:
+    """Fast one-time TCP probe for the Redis/Celery broker."""
+    global _redis_checked, _redis_ok
+    if _redis_checked:
+        return _redis_ok
+    _redis_checked = True
+    url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+    try:
+        hostport = url.replace("redis://", "").split("/")[0]
+        host, _, port_str = hostport.partition(":")
+        sock = socket.create_connection((host or "localhost", int(port_str or 6379)), timeout=0.3)
+        sock.close()
+        _redis_ok = True
+    except OSError:
+        _redis_ok = False
+    return _redis_ok
 
 # ---------------------------------------------------------------------------
 # Valid transition map
@@ -104,6 +129,32 @@ def transition(
     db.add(record)
     db.commit()
     db.refresh(txn)
+
+    # Publish event after commit — fire-and-forget, never blocks the response
+    from payment_router.kafka_producer import STATE_TO_EVENT, publish as kafka_publish
+    event_type = STATE_TO_EVENT.get(to_state.value)
+    if event_type:
+        kafka_publish(event_type, txn)
+        # Queue webhook delivery via Celery — only if Redis broker is reachable
+        if _redis_reachable():
+            try:
+                from payment_router.webhooks import dispatch_webhooks
+                payload = {
+                    "event_type": event_type,
+                    "transaction_id": txn.id,
+                    "provider": txn.provider,
+                    "country": txn.country,
+                    "card_brand": txn.card_brand,
+                    "amount": txn.amount,
+                    "currency": txn.currency,
+                    "response_code": txn.response_code,
+                    "state": txn.state,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                dispatch_webhooks.delay(txn.id, event_type, payload)
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning("Webhook dispatch skipped: %s", exc)
 
     return txn
 

@@ -1,0 +1,157 @@
+name: regional-bank-processor-c
+display_name: Regional Bank Processor C
+base_approval_rate: 0.81
+
+latency:
+  p50_ms: 200
+  p95_ms: 500
+  p99_ms: 900
+
+three_ds:
+  challenge_rate: 0.29
+  frictionless_rate: 0.71
+  version_2_2_rate: 0.60
+
+card_type_modifiers:
+  credit: 1.00
+  debit: 0.98
+  prepaid: 0.83
+  commercial: 0.97
+
+decline_codes:
+  - code: "05"
+    weight: 30.0
+  - code: "51"
+    weight: 22.0
+  - code: "61"
+    weight: 10.0
+  - code: "54"
+    weight: 6.0
+  - code: "41"
+    weight: 5.0
+  - code: "43"
+    weight: 4.0
+  - code: "14"
+    weight: 5.0
+  - code: "57"
+    weight: 4.0
+  - code: "91"
+    weight: 7.0
+  - code: "62"
+    weight: 7.0
+
+supported_currencies:
+  - AUD
+  - NZD
+  - SGD
+  - HKD
+  - JPY
+  - USD
+  - EUR
+  - GBP
+
+amount_modifier_thresholds:
+  "100": 1.00
+  "500": 0.99
+  "1000": 0.96
+  "5000": 0.91
+
+countries:
+  AU:
+    base: 0.91
+    card_modifiers:
+      amex: 1.07
+      mastercard: 0.99
+      visa: 0.99
+    three_ds:
+      challenge_rate: 0.22
+      frictionless_rate: 0.78
+      version_2_2_rate: 0.60
+  NZ:
+    base: 0.90
+    card_modifiers:
+      amex: 1.05
+      mastercard: 0.99
+      visa: 1.00
+    three_ds:
+      challenge_rate: 0.24
+      frictionless_rate: 0.76
+      version_2_2_rate: 0.60
+  SG:
+    base: 0.85
+    card_modifiers:
+      amex: 1.03
+      mastercard: 1.01
+      visa: 0.99
+    three_ds:
+      challenge_rate: 0.28
+      frictionless_rate: 0.72
+      version_2_2_rate: 0.60
+  HK:
+    base: 0.84
+    card_modifiers:
+      amex: 1.00
+      mastercard: 1.05
+      visa: 0.99
+    three_ds:
+      challenge_rate: 0.30
+      frictionless_rate: 0.70
+      version_2_2_rate: 0.60
+  JP:
+    base: 0.82
+    card_modifiers:
+      amex: 1.05
+      mastercard: 1.01
+      visa: 0.98
+    three_ds:
+      challenge_rate: 0.32
+      frictionless_rate: 0.68
+      version_2_2_rate: 0.60
+  MY:
+    base: 0.79
+    card_modifiers:
+      mastercard: 1.00
+      visa: 1.01
+    three_ds:
+      challenge_rate: 0.34
+      frictionless_rate: 0.66
+      version_2_2_rate: 0.60
+  TH:
+    base: 0.78
+    card_modifiers:
+      mastercard: 1.03
+      visa: 0.99
+    three_ds:
+      challenge_rate: 0.35
+      frictionless_rate: 0.65
+      version_2_2_rate: 0.60
+  ID:
+    base: 0.76
+    card_modifiers:
+      mastercard: 0.98
+      visa: 1.03
+    three_ds:
+      challenge_rate: 0.38
+      frictionless_rate: 0.62
+      version_2_2_rate: 0.60
+  US:
+    base: 0.76
+    card_modifiers:
+      amex: 1.00
+      mastercard: 1.00
+      visa: 1.00
+  GB:
+    base: 0.74
+    card_modifiers:
+      mastercard: 1.00
+      visa: 1.00
+  DE:
+    base: 0.72
+    card_modifiers:
+      mastercard: 0.99
+      visa: 1.00
+  BR:
+    base: 0.62
+    card_modifiers:
+      mastercard: 1.01
+      visa: 0.99

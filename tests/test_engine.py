@@ -124,7 +124,7 @@ def test_issuer_country_in_response():
 def test_retry_returns_retry_result():
     result = simulate_with_retry(
         _make_req(),
-        providers=["global-acquirer-a", "global-acquirer-b"],
+        providers=["global-acquirer-a", "regional-bank-processor-a"],
     )
     assert len(result.attempts) >= 1
     assert result.final_response is not None
@@ -139,7 +139,7 @@ def test_retry_stops_on_approval():
     for _ in range(n):
         result = simulate_with_retry(
             _make_req(),
-            providers=["global-acquirer-a", "global-acquirer-b"],
+            providers=["global-acquirer-a", "regional-bank-processor-a"],
         )
         if result.succeeded and len(result.attempts) == 1:
             single_attempt_count += 1
@@ -150,7 +150,7 @@ def test_retry_stops_on_approval():
 def test_retry_providers_tried_matches_attempts():
     result = simulate_with_retry(
         _make_req(),
-        providers=["global-acquirer-a", "global-acquirer-b"],
+        providers=["global-acquirer-a", "regional-bank-processor-a"],
     )
     assert result.providers_tried == [a.provider for a in result.attempts]
 

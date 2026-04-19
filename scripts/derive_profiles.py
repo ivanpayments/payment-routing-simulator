@@ -54,48 +54,65 @@ TOP_DECLINE_CODES = 8
 # Card brands we model (others like rupay, jcb, unionpay → mapped to closest or excluded)
 TRACKED_BRANDS = {"visa", "mastercard", "amex"}
 
-# Map CSV processor_name → archetype name (our 6 consolidated YAML files)
-# Sub-archetypes (regional-bank-br, apm-specialist-latam, etc.) are merged by pooling all rows
+# Map CSV processor_name → archetype variant name (our 10 YAML files)
+# regional-bank variants: a=LATAM, b=EU, c=APAC
+# regional-card-specialist: a=EU, b=LATAM
+# cross-border-fx: a=APAC corridor, b=EU corridor
 PROCESSOR_TO_ARCHETYPE: dict[str, str] = {
-    "global-acquirer-a":    "global-acquirer-a",
-    "global-acquirer-b":    "global-acquirer-b",
-    "fx-cross-border":      "fx-cross-border",
-    "orchestrator-high-risk": "orchestrator-high-risk",
-    "regional-bank-ae":     "regional-bank",
-    "regional-bank-br":     "regional-bank",
-    "regional-bank-in":     "regional-bank",
-    "regional-bank-mx":     "regional-bank",
-    "apm-specialist-in":    "apm-specialist",
-    "apm-specialist-latam": "apm-specialist",
-    "apm-specialist-sepa":  "apm-specialist",
+    "global-acquirer-a":      "global-acquirer-a",
+    "global-acquirer-b":      "global-acquirer-b",
+    "fx-cross-border":        "cross-border-fx-specialist-a",
+    "orchestrator-high-risk": "high-risk-or-orchestrator-a",
+    "regional-bank-ae":       "regional-bank-processor-a",
+    "regional-bank-br":       "regional-bank-processor-a",
+    "regional-bank-in":       "regional-bank-processor-a",
+    "regional-bank-mx":       "regional-bank-processor-a",
+    "apm-specialist-in":      "regional-card-specialist-b",
+    "apm-specialist-latam":   "regional-card-specialist-b",
+    "apm-specialist-sepa":    "regional-card-specialist-a",
 }
 
 # Supported currencies per provider archetype (hand-coded — CSV doesn't vary by archetype)
 SUPPORTED_CURRENCIES: dict[str, list[str]] = {
-    "global-acquirer-a": ["USD","EUR","GBP","BRL","MXN","INR","AUD","CAD","SGD","JPY","AED"],
-    "global-acquirer-b": ["USD","EUR","GBP","BRL","MXN","INR","AUD","CAD","SGD","JPY","AED"],
-    "regional-bank":     ["USD","EUR","GBP","INR","AED","SAR","BRL","MXN"],
-    "apm-specialist":    ["USD","EUR","GBP","BRL","MXN","INR","AUD","CAD","SGD","JPY","AED","PHP","THB","MYR","IDR","PEN","COP","CLP","ARS"],
-    "fx-cross-border":   ["USD","EUR","GBP","CAD","AUD","SGD","HKD","JPY","CHF","SEK","NOK","DKK","NZD","MXN","BRL","INR","ZAR","AED","SAR","TRY"],
-    "orchestrator-high-risk": ["USD","EUR","GBP","BRL","MXN","INR","CAD","AUD"],
+    "global-acquirer-a":            ["USD","EUR","GBP","BRL","MXN","INR","AUD","CAD","SGD","JPY","AED"],
+    "global-acquirer-b":            ["USD","EUR","GBP","BRL","MXN","INR","AUD","CAD","SGD","JPY","AED"],
+    "regional-bank-processor-a":    ["USD","BRL","MXN","COP","ARS","CLP","PEN","AED"],
+    "regional-bank-processor-b":    ["USD","EUR","GBP","CHF","SEK","NOK","DKK","PLN"],
+    "regional-bank-processor-c":    ["USD","AUD","NZD","SGD","HKD","JPY","MYR"],
+    "regional-card-specialist-a":   ["USD","EUR","GBP","CHF","SEK","NOK","DKK","PLN","CZK"],
+    "regional-card-specialist-b":   ["USD","BRL","MXN","COP","ARS","CLP","PEN"],
+    "cross-border-fx-specialist-a": ["USD","SGD","HKD","JPY","AUD","MYR","THB","IDR","PHP","NZD"],
+    "cross-border-fx-specialist-b": ["USD","EUR","GBP","CHF","SEK","NOK","DKK","PLN","HUF","CZK"],
+    "high-risk-or-orchestrator-a":  ["USD","EUR","GBP","CAD","AUD"],
+    "high-risk-or-orchestrator-b":  ["USD","EUR","GBP","CAD","AUD"],
 }
 
 AMOUNT_THRESHOLDS: dict[str, dict[str, float]] = {
-    "global-acquirer-a": {"100": 1.00, "500": 0.99, "1000": 0.97, "5000": 0.95},
-    "global-acquirer-b": {"100": 1.00, "500": 0.99, "1000": 0.97, "5000": 0.95},
-    "regional-bank":     {"100": 1.00, "500": 0.99, "1000": 0.96, "5000": 0.92},
-    "apm-specialist":    {"100": 1.00, "500": 1.00, "1000": 0.98, "5000": 0.96},
-    "fx-cross-border":   {"100": 1.00, "500": 0.98, "1000": 0.96, "5000": 0.93},
-    "orchestrator-high-risk": {"100": 1.00, "500": 0.97, "1000": 0.94, "5000": 0.89},
+    "global-acquirer-a":            {"100": 1.00, "500": 0.99, "1000": 0.97, "5000": 0.95},
+    "global-acquirer-b":            {"100": 1.00, "500": 0.99, "1000": 0.97, "5000": 0.94},
+    "regional-bank-processor-a":    {"100": 1.00, "500": 0.98, "1000": 0.95, "5000": 0.90},
+    "regional-bank-processor-b":    {"100": 1.00, "500": 0.99, "1000": 0.96, "5000": 0.92},
+    "regional-bank-processor-c":    {"100": 1.00, "500": 0.98, "1000": 0.96, "5000": 0.91},
+    "regional-card-specialist-a":   {"100": 1.00, "500": 1.00, "1000": 0.98, "5000": 0.96},
+    "regional-card-specialist-b":   {"100": 1.00, "500": 0.99, "1000": 0.97, "5000": 0.94},
+    "cross-border-fx-specialist-a": {"100": 1.00, "500": 0.98, "1000": 0.95, "5000": 0.91},
+    "cross-border-fx-specialist-b": {"100": 1.00, "500": 0.98, "1000": 0.96, "5000": 0.92},
+    "high-risk-or-orchestrator-a":  {"100": 1.00, "500": 0.97, "1000": 0.94, "5000": 0.89},
+    "high-risk-or-orchestrator-b":  {"100": 1.00, "500": 0.97, "1000": 0.93, "5000": 0.86},
 }
 
 DISPLAY_NAMES = {
-    "global-acquirer-a":    "Global Acquirer A",
-    "global-acquirer-b":    "Global Acquirer B",
-    "regional-bank":        "Regional Bank",
-    "apm-specialist":       "APM Specialist",
-    "fx-cross-border":      "FX Cross-Border",
-    "orchestrator-high-risk": "Orchestrator / High-Risk",
+    "global-acquirer-a":            "Global Acquirer A",
+    "global-acquirer-b":            "Global Acquirer B",
+    "regional-bank-processor-a":    "Regional Bank Processor A",
+    "regional-bank-processor-b":    "Regional Bank Processor B",
+    "regional-bank-processor-c":    "Regional Bank Processor C",
+    "regional-card-specialist-a":   "Regional Card Specialist A",
+    "regional-card-specialist-b":   "Regional Card Specialist B",
+    "cross-border-fx-specialist-a": "FX Cross-Border Specialist A",
+    "cross-border-fx-specialist-b": "FX Cross-Border Specialist B",
+    "high-risk-or-orchestrator-a":  "High-Risk Orchestrator A",
+    "high-risk-or-orchestrator-b":  "High-Risk Orchestrator B",
 }
 
 # v2.2 rate is hand-tuned (CSV has version column but not always reliable)

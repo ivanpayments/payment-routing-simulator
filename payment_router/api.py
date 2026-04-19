@@ -2,19 +2,29 @@
 
 from __future__ import annotations
 
+import json
+import os
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional
 
-from contextlib import asynccontextmanager
+import re
+import redis
 
-from fastapi import Depends, FastAPI, HTTPException, Query
-from pydantic import BaseModel
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
+from starlette.middleware.base import BaseHTTPMiddleware
+
+_COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
+_CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
 
 from payment_router import __version__
-from payment_router.db import create_tables, get_db
+from payment_router.api_keys import seed_test_key, validate_secret_key
+from payment_router.db import Session as DBSession, create_tables, engine, get_db
 from payment_router.engine import compare_providers, simulate_transaction, simulate_with_retry
-from payment_router.query_routing_intelligence import query_routing_intelligence
+from payment_router.idempotency import get_cached, store as idem_store
 from payment_router.models import (
     CompareRequest,
     CompareResult,
@@ -25,6 +35,8 @@ from payment_router.models import (
     TransactionState,
 )
 from payment_router.provider_loader import list_providers, load_provider
+from payment_router.query_routing_intelligence import query_routing_intelligence
+from payment_router.rate_limit import is_rate_limited
 from payment_router.state_machine import (
     InvalidTransitionError,
     TransactionNotFoundError,
@@ -33,35 +45,140 @@ from payment_router.state_machine import (
     transition,
 )
 
+_REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
+
+
+# ---------------------------------------------------------------------------
+# Lifespan — startup/shutdown
+# ---------------------------------------------------------------------------
+
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    """Create DB tables on startup (SQLite for local dev; Alembic handles PostgreSQL)."""
     create_tables()
+    if os.environ.get("ENV", "local") == "local":
+        with DBSession(engine) as db:
+            seed_test_key(db)
+    try:
+        application.state.redis = redis.from_url(_REDIS_URL, decode_responses=True)
+        application.state.redis.ping()
+        application.state.redis_available = True
+    except Exception:
+        application.state.redis_available = False
+        application.state.redis = None
     yield
+    if application.state.redis:
+        application.state.redis.close()
+    from payment_router.kafka_producer import close as kafka_close
+    kafka_close()
+
+
+# ---------------------------------------------------------------------------
+# App + middleware
+# ---------------------------------------------------------------------------
+
+class _LimitBodySize(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > 1_048_576:
+            return JSONResponse({"detail": "Request body too large (max 1 MB)"}, status_code=413)
+        return await call_next(request)
 
 
 app = FastAPI(
     title="payment-router",
-    description="Payment provider routing simulator REST API",
+    description=(
+        "Payment provider routing simulator REST API. "
+        "Responses are validated at runtime against 35 Class-A pattern-rule invariants "
+        "(MIT gating, BIN ranges, 3DS-on-MIT caps, anti-patterns, cascade routing) — "
+        "the same rules the dataset generator uses, so the live API matches the 106,739-row "
+        "synthetic dataset's pattern compliance. Distributional and sequence patterns are "
+        "encoded in YAML calibration and the Postgres state machine. "
+        "See `scripts/validate_api_compliance.py` for a sampling-based compliance harness."
+    ),
     version=__version__,
     lifespan=lifespan,
+    root_path=os.environ.get("ROOT_PATH", ""),
     openapi_tags=[
-        {"name": "simulation", "description": "Simulate transactions and compare providers"},
-        {"name": "lifecycle", "description": "Payment lifecycle: capture, void, refund"},
-        {"name": "transactions", "description": "Transaction history and state"},
-        {"name": "webhooks", "description": "Webhook registration (Session 5)"},
-        {"name": "providers", "description": "Provider profile management"},
+        {"name": "simulation", "description": "Simulate transactions and compare providers. Class-A pattern rules applied per request."},
+        {"name": "lifecycle", "description": "Payment lifecycle: capture, void, refund. Strict state-machine validation."},
+        {"name": "transactions", "description": "Transaction history and state transitions."},
+        {"name": "webhooks", "description": "Webhook registration. HMAC-SHA256 signing, exponential backoff."},
+        {"name": "providers", "description": "Provider (archetype) profile management. 5 archetypes / 11 variants / 6 card brands."},
     ],
 )
+# Default values so app.state.redis is always present (lifespan overwrites if Redis is up).
+app.state.redis = None
+app.state.redis_available = False
+app.add_middleware(_LimitBodySize)
 
 
 # ---------------------------------------------------------------------------
-# Health + providers
+# Auth + rate-limit dependency
+# ---------------------------------------------------------------------------
+
+def get_current_api_key(
+    request: Request,
+    authorization: str = Header(default=""),
+    db: Session = Depends(get_db),
+):
+    """Validate Bearer sk_test_... token and enforce per-key rate limit."""
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
+    token = authorization.removeprefix("Bearer ").strip()
+    api_key = validate_secret_key(db, token)
+    if api_key is None:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    rc = request.app.state.redis
+    client_ip = request.client.host if request.client else None
+    if rc and is_rate_limited(rc, api_key.id, client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    return api_key
+
+
+# ---------------------------------------------------------------------------
+# Idempotency helpers — used inside endpoints, not as middleware
+# ---------------------------------------------------------------------------
+
+def _idem_check(request: Request, api_key_id: str, idem_key: str | None) -> dict | None:
+    if not idem_key:
+        return None
+    rc = request.app.state.redis
+    if rc is None:
+        return None
+    return get_cached(rc, api_key_id, idem_key)
+
+
+def _idem_store(request: Request, api_key_id: str, idem_key: str | None, body: dict) -> None:
+    if not idem_key:
+        return
+    rc = request.app.state.redis
+    if rc is None:
+        return
+    idem_store(rc, api_key_id, idem_key, body)
+
+
+# ---------------------------------------------------------------------------
+# Health + providers (no auth)
 # ---------------------------------------------------------------------------
 
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "version": __version__}
+
+
+@app.get("/stats/rules", tags=["simulation"])
+def rule_stats() -> dict:
+    """Per-rule evaluated/applied counts since process start.
+
+    Read-only observability. Each rule has two counters:
+    `<rule_id>:evaluated` (chain visited the rule) and
+    `<rule_id>:applied` (rule matched its condition and mutated the result).
+    """
+    from payment_router.pattern_rules import get_counters, rule_ids
+    return {
+        "rules": rule_ids(),
+        "counters": get_counters(),
+    }
 
 
 @app.get("/providers")
@@ -83,18 +200,24 @@ def get_provider(name: str) -> dict:
 # ---------------------------------------------------------------------------
 
 @app.post("/simulate", response_model=ProviderResponse, tags=["simulation"])
-def simulate(req: SimulateRequest, db: Session = Depends(get_db)) -> ProviderResponse:
+def simulate(
+    req: SimulateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key=Depends(get_current_api_key),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+) -> ProviderResponse:
     """Simulate a single transaction against one provider.
 
-    The transaction is persisted to the database and can be retrieved via
-    `GET /transactions/{transaction_id}`. Use `POST /capture`, `/void`, or `/refund`
-    to advance the payment lifecycle.
+    Requires `Authorization: Bearer sk_test_...`. Supports idempotency via
+    the `Idempotency-Key` header — repeat calls with the same key return the
+    cached response for 24 hours.
 
     Example body:
     ```json
     {
-        "provider": "global-acquirer-a",
-        "country": "US",
+        "provider": "global-acquirer",
+        "country": "BR",
         "issuer_country": "NG",
         "card_brand": "visa",
         "card_type": "credit",
@@ -104,34 +227,29 @@ def simulate(req: SimulateRequest, db: Session = Depends(get_db)) -> ProviderRes
     }
     ```
     """
+    cached = _idem_check(request, api_key.id, idempotency_key)
+    if cached is not None:
+        return JSONResponse(cached, headers={"X-Idempotency-Replay": "true"})
     try:
-        return simulate_transaction(req, db=db)
+        result = simulate_transaction(req, db=db)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    _idem_store(request, api_key.id, idempotency_key, result.model_dump())
+    return result
 
 
 # ---------------------------------------------------------------------------
 # Compare — rank all providers for a given transaction profile
 # ---------------------------------------------------------------------------
 
-@app.post("/compare", response_model=list[CompareResult])
-def compare(req: CompareRequest) -> list[CompareResult]:
+@app.post("/compare", response_model=list[CompareResult], tags=["simulation"])
+def compare(
+    req: CompareRequest,
+    api_key=Depends(get_current_api_key),
+) -> list[CompareResult]:
     """Compare all providers for a transaction profile (runs 500 simulations per provider).
 
     Returns providers ranked by projected approval rate descending.
-
-    Example body:
-    ```json
-    {
-        "country": "BR",
-        "issuer_country": "BR",
-        "card_brand": "visa",
-        "card_type": "credit",
-        "amount": 300.0,
-        "currency": "USD",
-        "use_3ds": false
-    }
-    ```
     """
     return compare_providers(req)
 
@@ -142,32 +260,16 @@ def compare(req: CompareRequest) -> list[CompareResult]:
 
 class RouteRequest(SimulateRequest):
     """SimulateRequest extended with a priority-ordered provider list for retry."""
-    providers: list[str]
-    max_attempts: int = 3
+    providers: list[str] = Field(..., min_length=1, max_length=10)
+    max_attempts: int = Field(3, ge=1, le=10)
 
 
-@app.post("/route", response_model=RetryResult)
-def route(req: RouteRequest) -> RetryResult:
-    """Route a transaction with soft-decline retry cascade.
-
-    Tries providers in the order given. On a soft decline (retryable code)
-    cascades to the next provider. Stops on approval or hard decline.
-
-    Example body:
-    ```json
-    {
-        "providers": ["global-acquirer-a", "regional-bank", "apm-specialist"],
-        "country": "BR",
-        "issuer_country": "US",
-        "card_brand": "visa",
-        "card_type": "credit",
-        "amount": 300.0,
-        "currency": "USD",
-        "use_3ds": false,
-        "max_attempts": 3
-    }
-    ```
-    """
+@app.post("/route", response_model=RetryResult, tags=["simulation"])
+def route(
+    req: RouteRequest,
+    api_key=Depends(get_current_api_key),
+) -> RetryResult:
+    """Route a transaction with soft-decline retry cascade across providers."""
     try:
         sim_req = SimulateRequest(
             provider=req.providers[0],
@@ -186,42 +288,51 @@ def route(req: RouteRequest) -> RetryResult:
 
 
 # ---------------------------------------------------------------------------
-# Recommend — suggest best provider + reasoning
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
 # Query — natural-language-ready routing intelligence (used by chatbot)
 # ---------------------------------------------------------------------------
 
 class QueryRequest(BaseModel):
     country: str
-    amount: float
+    amount: float = Field(..., gt=0, le=10_000_000)
     currency: str = "USD"
     card_brand: str = "visa"
     card_type: str = "credit"
     issuer_country: str | None = None
     use_3ds: bool = False
 
+    @field_validator("country")
+    @classmethod
+    def country_upper(cls, v: str) -> str:
+        v = v.upper().strip()
+        if not _COUNTRY_RE.match(v):
+            raise ValueError("country must be ISO 3166-1 alpha-2")
+        return v
 
-@app.post("/query")
-def query(req: QueryRequest) -> dict:
-    """Routing intelligence endpoint — designed to be called by the Payment Data Chatbot.
+    @field_validator("issuer_country")
+    @classmethod
+    def issuer_country_upper(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.upper().strip()
+        if not _COUNTRY_RE.match(v):
+            raise ValueError("issuer_country must be ISO 3166-1 alpha-2")
+        return v
 
-    Returns a structured answer with recommended provider, retry order,
-    plain-English reasoning, and a key insight about this routing scenario.
+    @field_validator("currency")
+    @classmethod
+    def currency_upper(cls, v: str) -> str:
+        v = v.upper().strip()
+        if not _CURRENCY_RE.match(v):
+            raise ValueError("currency must be ISO 4217")
+        return v
 
-    Example body:
-    ```json
-    {
-        "country": "BR",
-        "amount": 300.0,
-        "card_brand": "visa",
-        "card_type": "debit",
-        "issuer_country": null,
-        "use_3ds": false
-    }
-    ```
-    """
+
+@app.post("/query", tags=["simulation"])
+def query(
+    req: QueryRequest,
+    api_key=Depends(get_current_api_key),
+) -> dict:
+    """Routing intelligence endpoint for the Payment Data Chatbot."""
     return query_routing_intelligence(
         country=req.country,
         amount=req.amount,
@@ -233,21 +344,16 @@ def query(req: QueryRequest) -> dict:
     )
 
 
-@app.post("/recommend", response_model=RouteRecommendation)
-def recommend(req: CompareRequest) -> RouteRecommendation:
-    """Recommend the best provider for a transaction profile with reasoning.
-
-    Runs compare internally, then returns the top provider with a plain-English
-    explanation of why it ranks first.
-    """
+@app.post("/recommend", response_model=RouteRecommendation, tags=["simulation"])
+def recommend(
+    req: CompareRequest,
+    api_key=Depends(get_current_api_key),
+) -> RouteRecommendation:
+    """Recommend the best provider with plain-English reasoning."""
     rankings = compare_providers(req)
     best = rankings[0]
     second = rankings[1] if len(rankings) > 1 else None
-
-    issuer_note = (
-        f" (issuer country: {req.issuer_country})" if req.issuer_country else ""
-    )
-
+    issuer_note = f" (issuer country: {req.issuer_country})" if req.issuer_country else ""
     if second:
         gap = best.projected_approval_rate - second.projected_approval_rate
         reasoning = (
@@ -262,12 +368,7 @@ def recommend(req: CompareRequest) -> RouteRecommendation:
             f"{best.provider} is the only available provider "
             f"with {best.projected_approval_rate:.1%} projected approval."
         )
-
-    return RouteRecommendation(
-        rankings=rankings,
-        recommended_provider=best.provider,
-        reasoning=reasoning,
-    )
+    return RouteRecommendation(rankings=rankings, recommended_provider=best.provider, reasoning=reasoning)
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +376,6 @@ def recommend(req: CompareRequest) -> RouteRecommendation:
 # ---------------------------------------------------------------------------
 
 class TransactionResponse(BaseModel):
-    """Slim view of a persisted transaction returned by lifecycle endpoints."""
     transaction_id: str
     provider: str
     state: str
@@ -309,15 +409,22 @@ def _txn_to_response(txn) -> TransactionResponse:
 
 
 @app.post("/capture/{transaction_id}", response_model=TransactionResponse, tags=["lifecycle"])
-def capture(transaction_id: str, db: Session = Depends(get_db)) -> TransactionResponse:
-    """Capture an authorized payment (AUTHORIZED → CAPTURED).
-
-    Funds are transferred to the merchant. Only valid from AUTHORIZED state.
-    Returns 409 if the transaction is not in AUTHORIZED state.
-    """
+def capture(
+    transaction_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key=Depends(get_current_api_key),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+) -> TransactionResponse:
+    """Capture an authorized payment (AUTHORIZED → CAPTURED). Returns 409 on invalid state."""
+    cached = _idem_check(request, api_key.id, idempotency_key)
+    if cached is not None:
+        return JSONResponse(cached, headers={"X-Idempotency-Replay": "true"})
     try:
         txn = transition(db, transaction_id, TransactionState.CAPTURED, triggered_by="capture")
-        return _txn_to_response(txn)
+        result = _txn_to_response(txn)
+        _idem_store(request, api_key.id, idempotency_key, result.model_dump())
+        return result
     except TransactionNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except InvalidTransitionError as e:
@@ -325,15 +432,22 @@ def capture(transaction_id: str, db: Session = Depends(get_db)) -> TransactionRe
 
 
 @app.post("/void/{transaction_id}", response_model=TransactionResponse, tags=["lifecycle"])
-def void(transaction_id: str, db: Session = Depends(get_db)) -> TransactionResponse:
-    """Void an authorized payment (AUTHORIZED → VOIDED).
-
-    Releases the reserved funds without capturing. Only valid from AUTHORIZED state.
-    Returns 409 if the transaction is not in AUTHORIZED state.
-    """
+def void(
+    transaction_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key=Depends(get_current_api_key),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+) -> TransactionResponse:
+    """Void an authorized payment (AUTHORIZED → VOIDED). Returns 409 on invalid state."""
+    cached = _idem_check(request, api_key.id, idempotency_key)
+    if cached is not None:
+        return JSONResponse(cached, headers={"X-Idempotency-Replay": "true"})
     try:
         txn = transition(db, transaction_id, TransactionState.VOIDED, triggered_by="void")
-        return _txn_to_response(txn)
+        result = _txn_to_response(txn)
+        _idem_store(request, api_key.id, idempotency_key, result.model_dump())
+        return result
     except TransactionNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except InvalidTransitionError as e:
@@ -341,15 +455,22 @@ def void(transaction_id: str, db: Session = Depends(get_db)) -> TransactionRespo
 
 
 @app.post("/refund/{transaction_id}", response_model=TransactionResponse, tags=["lifecycle"])
-def refund(transaction_id: str, db: Session = Depends(get_db)) -> TransactionResponse:
-    """Refund a captured payment (CAPTURED → REFUNDED).
-
-    Returns funds to the cardholder. Only valid from CAPTURED state.
-    Returns 409 if the transaction is not in CAPTURED state.
-    """
+def refund(
+    transaction_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key=Depends(get_current_api_key),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+) -> TransactionResponse:
+    """Refund a captured payment (CAPTURED → REFUNDED). Returns 409 on invalid state."""
+    cached = _idem_check(request, api_key.id, idempotency_key)
+    if cached is not None:
+        return JSONResponse(cached, headers={"X-Idempotency-Replay": "true"})
     try:
         txn = transition(db, transaction_id, TransactionState.REFUNDED, triggered_by="refund")
-        return _txn_to_response(txn)
+        result = _txn_to_response(txn)
+        _idem_store(request, api_key.id, idempotency_key, result.model_dump())
+        return result
     except TransactionNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except InvalidTransitionError as e:
@@ -357,7 +478,82 @@ def refund(transaction_id: str, db: Session = Depends(get_db)) -> TransactionRes
 
 
 # ---------------------------------------------------------------------------
-# Transaction history
+# Webhooks — registration
+# ---------------------------------------------------------------------------
+
+_VALID_EVENTS = {
+    "payment.authorized", "payment.declined",
+    "payment.captured", "payment.voided", "payment.refunded",
+}
+
+
+class WebhookRegisterRequest(BaseModel):
+    url: str = Field(..., description="HTTPS URL to POST events to")
+    events: list[str] = Field(..., min_length=1, description="Event types to subscribe to")
+    secret: str = Field(..., min_length=8, max_length=128, description="Signing secret (save it — not shown again)")
+
+    @field_validator("events")
+    @classmethod
+    def validate_events(cls, v: list[str]) -> list[str]:
+        invalid = set(v) - _VALID_EVENTS
+        if invalid:
+            raise ValueError(f"Unknown event types: {invalid}. Valid: {sorted(_VALID_EVENTS)}")
+        return v
+
+
+class WebhookRegisterResponse(BaseModel):
+    webhook_id: str
+    url: str
+    events: list[str]
+    created_at: datetime
+
+
+@app.post("/webhooks/register", response_model=WebhookRegisterResponse, status_code=201, tags=["webhooks"])
+def register_webhook(
+    req: WebhookRegisterRequest,
+    db: Session = Depends(get_db),
+    api_key=Depends(get_current_api_key),
+) -> WebhookRegisterResponse:
+    """Register a webhook URL to receive signed payment events.
+
+    The server will POST HMAC-SHA256 signed payloads to your URL on each
+    matching event. Verify the signature:
+
+        expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+        assert request.headers["X-Signature-256"] == f"sha256={expected}"
+
+    Example body:
+    ```json
+    {
+        "url": "https://your-server.com/webhooks/payments",
+        "events": ["payment.authorized", "payment.declined"],
+        "secret": "my_webhook_secret_32chars_minimum"
+    }
+    ```
+    """
+    from payment_router.db import WebhookConfig
+    import json as _json
+
+    cfg = WebhookConfig(
+        url=req.url,
+        events=_json.dumps(req.events),
+        secret=req.secret,
+        active=True,
+    )
+    db.add(cfg)
+    db.commit()
+    db.refresh(cfg)
+
+    return WebhookRegisterResponse(
+        webhook_id=cfg.id,
+        url=cfg.url,
+        events=req.events,
+        created_at=cfg.created_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Transaction history (no auth — public read for demo)
 # ---------------------------------------------------------------------------
 
 @app.get("/transactions/{transaction_id}", response_model=TransactionResponse, tags=["transactions"])
@@ -397,12 +593,12 @@ def get_transaction_transitions(
 @app.get("/transactions", response_model=list[TransactionResponse], tags=["transactions"])
 def list_transactions(
     provider: Optional[str] = Query(None, description="Filter by provider name"),
-    state: Optional[str] = Query(None, description="Filter by state (authorized/captured/etc.)"),
-    limit: int = Query(50, ge=1, le=500, description="Max results"),
-    offset: int = Query(0, ge=0, description="Pagination offset"),
+    state: Optional[str] = Query(None, description="Filter by state"),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[TransactionResponse]:
-    """List recent transactions with optional provider/state filters."""
+    """List recent transactions with optional filters."""
     from payment_router.db import Transaction as TxnModel
     from sqlalchemy import select
 
