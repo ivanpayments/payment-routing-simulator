@@ -1,5 +1,6 @@
-# Source data — never commit (108K-row CSV, internal)
-Claude files/
+# Data — routing_transactions.csv is 93 MB, over GitHub's 100 MB per-file limit.
+# Regenerate with: python "Claude files/generate_routing_transactions.py"
+Claude files/routing_transactions.csv
 
 # Python
 __pycache__/
