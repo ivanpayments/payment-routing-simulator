@@ -8,7 +8,6 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional
 
-import re
 import redis
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -16,9 +15,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
-
-_COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
-_CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
 
 from payment_router import __version__
 from payment_router.api_keys import seed_test_key, validate_secret_key
@@ -37,6 +33,11 @@ from payment_router.models import (
 from payment_router.provider_loader import list_providers, load_provider
 from payment_router.query_routing_intelligence import query_routing_intelligence
 from payment_router.rate_limit import is_rate_limited
+from payment_router.validators import (
+    normalize_country,
+    normalize_currency,
+    normalize_optional_country,
+)
 from payment_router.state_machine import (
     InvalidTransitionError,
     TransactionNotFoundError,
@@ -300,31 +301,9 @@ class QueryRequest(BaseModel):
     issuer_country: str | None = None
     use_3ds: bool = False
 
-    @field_validator("country")
-    @classmethod
-    def country_upper(cls, v: str) -> str:
-        v = v.upper().strip()
-        if not _COUNTRY_RE.match(v):
-            raise ValueError("country must be ISO 3166-1 alpha-2")
-        return v
-
-    @field_validator("issuer_country")
-    @classmethod
-    def issuer_country_upper(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        v = v.upper().strip()
-        if not _COUNTRY_RE.match(v):
-            raise ValueError("issuer_country must be ISO 3166-1 alpha-2")
-        return v
-
-    @field_validator("currency")
-    @classmethod
-    def currency_upper(cls, v: str) -> str:
-        v = v.upper().strip()
-        if not _CURRENCY_RE.match(v):
-            raise ValueError("currency must be ISO 4217")
-        return v
+    _country_upper = field_validator("country")(classmethod(lambda cls, v: normalize_country(v)))
+    _issuer_country_upper = field_validator("issuer_country")(classmethod(lambda cls, v: normalize_optional_country(v)))
+    _currency_upper = field_validator("currency")(classmethod(lambda cls, v: normalize_currency(v)))
 
 
 @app.post("/query", tags=["simulation"])

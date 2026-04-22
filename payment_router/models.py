@@ -7,9 +7,13 @@ from enum import Enum
 from typing import Optional
 from pydantic import AnyHttpUrl, BaseModel, Field, field_validator, model_validator
 
+from payment_router.validators import (
+    normalize_country,
+    normalize_currency,
+    normalize_optional_country,
+)
+
 _PROVIDER_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,63}$")
-_COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
-_CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
 
 
 # ---------------------------------------------------------------------------
@@ -163,31 +167,9 @@ class SimulateRequest(_RejectCardholderData):
             raise ValueError("provider must be a slug: lowercase letters, digits, hyphens, max 64 chars")
         return v
 
-    @field_validator("country")
-    @classmethod
-    def country_upper(cls, v: str) -> str:
-        v = v.upper().strip()
-        if not _COUNTRY_RE.match(v):
-            raise ValueError("country must be ISO 3166-1 alpha-2 (two uppercase letters, e.g. US)")
-        return v
-
-    @field_validator("issuer_country")
-    @classmethod
-    def issuer_country_upper(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        v = v.upper().strip()
-        if not _COUNTRY_RE.match(v):
-            raise ValueError("issuer_country must be ISO 3166-1 alpha-2 (two uppercase letters, e.g. US)")
-        return v
-
-    @field_validator("currency")
-    @classmethod
-    def currency_upper(cls, v: str) -> str:
-        v = v.upper().strip()
-        if not _CURRENCY_RE.match(v):
-            raise ValueError("currency must be ISO 4217 (three uppercase letters, e.g. USD)")
-        return v
+    _country_upper = field_validator("country")(classmethod(lambda cls, v: normalize_country(v)))
+    _issuer_country_upper = field_validator("issuer_country")(classmethod(lambda cls, v: normalize_optional_country(v)))
+    _currency_upper = field_validator("currency")(classmethod(lambda cls, v: normalize_currency(v)))
 
 
 class ThreeDSResult(BaseModel):
@@ -237,31 +219,9 @@ class CompareRequest(_RejectCardholderData):
     currency: str = "USD"
     use_3ds: bool = False
 
-    @field_validator("country")
-    @classmethod
-    def country_upper(cls, v: str) -> str:
-        v = v.upper().strip()
-        if not _COUNTRY_RE.match(v):
-            raise ValueError("country must be ISO 3166-1 alpha-2 (two uppercase letters, e.g. US)")
-        return v
-
-    @field_validator("issuer_country")
-    @classmethod
-    def issuer_country_upper(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        v = v.upper().strip()
-        if not _COUNTRY_RE.match(v):
-            raise ValueError("issuer_country must be ISO 3166-1 alpha-2 (two uppercase letters, e.g. US)")
-        return v
-
-    @field_validator("currency")
-    @classmethod
-    def currency_upper(cls, v: str) -> str:
-        v = v.upper().strip()
-        if not _CURRENCY_RE.match(v):
-            raise ValueError("currency must be ISO 4217 (three uppercase letters, e.g. USD)")
-        return v
+    _country_upper = field_validator("country")(classmethod(lambda cls, v: normalize_country(v)))
+    _issuer_country_upper = field_validator("issuer_country")(classmethod(lambda cls, v: normalize_optional_country(v)))
+    _currency_upper = field_validator("currency")(classmethod(lambda cls, v: normalize_currency(v)))
 
 
 class CompareResult(BaseModel):

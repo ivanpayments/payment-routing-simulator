@@ -412,30 +412,38 @@ def compare_providers(req: CompareRequest) -> list[CompareResult]:
             currency=req.currency,
             use_3ds=req.use_3ds,
         )
-        responses = [simulate_transaction(sim_req) for _ in range(N)]
 
-        approved_count = sum(1 for r in responses if r.approved)
-        approval_rate = approved_count / N
+        approved_count = 0
+        latencies: list[float] = []
+        decline_codes: Counter = Counter()
+        declined_total = 0
+        challenged_count = 0
 
-        latencies = sorted(r.latency_ms for r in responses)
+        for _ in range(N):
+            r = simulate_transaction(sim_req)
+            latencies.append(r.latency_ms)
+            if r.approved:
+                approved_count += 1
+            else:
+                declined_total += 1
+                decline_codes[r.response_code] += 1
+            if req.use_3ds and r.three_ds and r.three_ds.challenged:
+                challenged_count += 1
+
+        latencies.sort()
         p50 = latencies[int(N * 0.50)]
         p95 = latencies[int(N * 0.95)]
 
-        declined = [r for r in responses if not r.approved]
-        code_dist: dict[str, float] = {}
-        if declined:
-            counts = Counter(r.response_code for r in declined)
-            total = len(declined)
-            code_dist = {code: count / total for code, count in counts.most_common(5)}
-
-        challenge_rate = None
-        if req.use_3ds:
-            challenged = [r for r in responses if r.three_ds and r.three_ds.challenged]
-            challenge_rate = len(challenged) / N
+        code_dist: dict[str, float] = (
+            {code: count / declined_total for code, count in decline_codes.most_common(5)}
+            if declined_total
+            else {}
+        )
+        challenge_rate = (challenged_count / N) if req.use_3ds else None
 
         results.append(CompareResult(
             provider=provider_name,
-            projected_approval_rate=approval_rate,
+            projected_approval_rate=approved_count / N,
             latency_p50_ms=p50,
             latency_p95_ms=p95,
             decline_code_distribution=code_dist,
