@@ -56,7 +56,7 @@
     position: relative;
     height: 90vh;
     min-height: 500px;
-    background-image: url('hero.jpg?v=20260419');
+    background-image: url('hero.jpg?v=20260420');
     background-size: cover;
     background-position: center center;
     display: flex;
@@ -96,12 +96,12 @@
     color: #fff;
   }
   .hero-sub {
-    font-size: 22px;
+    font-size: 16px;
     font-weight: 300;
     color: rgba(255,255,255,0.92);
-    line-height: 1.4;
+    line-height: 1.55;
     margin: 0 auto 28px;
-    max-width: 820px;
+    max-width: 860px;
   }
   .hero-install {
     display: inline-flex;
@@ -240,6 +240,33 @@
     font-variant-numeric: tabular-nums;
   }
   .left-col ol li b { font-weight: 500; color: var(--ink); }
+  /* When an <ol> has only one item, drop the numbering + borders so it reads as prose */
+  .left-col ol li:first-child:last-child {
+    padding: 0;
+    border-top: none;
+    border-bottom: none;
+  }
+  .left-col ol li:first-child:last-child::before { content: none; }
+
+  /* Two-option blocks in "Try it yourself" */
+  .option-block { margin-top: 24px; }
+  .option-block:first-of-type { margin-top: 8px; }
+  .option-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+    margin: 0 0 6px;
+    letter-spacing: -0.1px;
+  }
+  .option-desc {
+    font-size: 14.5px;
+    line-height: 1.7;
+    color: #333;
+    margin: 0 0 10px;
+  }
+  .option-desc code {
+    font-size: 0.9em;
+  }
 
   .stats-grid {
     display: grid;
@@ -533,7 +560,7 @@
   @media (max-width: 980px) {
     .hero-band { height: 80vh; }
     .hero-h1 { font-size: 44px; line-height: 1.15; }
-    .hero-sub { font-size: 18px; }
+    .hero-sub { font-size: 15px; }
     .uptitle { margin-bottom: 20px; font-size: 12px; }
     .two-col {
       grid-template-columns: 1fr;
@@ -591,11 +618,6 @@
     <div class="uptitle" id="hero-uptitle"></div>
     <h1 class="hero-h1" id="hero-h1"></h1>
     <p class="hero-sub" id="hero-sub"></p>
-    <div class="hero-install" id="hero-install" role="button" tabindex="0" title="Click to copy">
-      <span id="hero-install-cmd"></span>
-      <span class="copy-hint" id="hero-install-hint">Copy</span>
-    </div>
-    <div class="hero-stats" id="hero-stats"></div>
   </div>
 </section>
 
@@ -622,27 +644,26 @@
       <p id="who-body"></p>
     </section>
 
-    <section id="section-what-it-does">
-      <div class="section-label" id="wid-label"></div>
-      <h2 class="section-h" id="wid-h"></h2>
-      <p class="heading-lead" id="wid-lead"></p>
-      <ol id="wid-points"></ol>
-    </section>
-
     <section id="section-how-to-use">
       <div class="section-label" id="htu-label"></div>
       <h2 class="section-h" id="htu-h"></h2>
       <p id="htu-body"></p>
-      <pre class="code-block" id="htu-code"></pre>
+      <div class="option-block">
+        <div class="option-title" id="htu-opt1-title"></div>
+        <p class="option-desc" id="htu-opt1-desc"></p>
+        <pre class="code-block" id="htu-opt1-code"></pre>
+      </div>
+      <div class="option-block">
+        <div class="option-title" id="htu-opt2-title"></div>
+        <p class="option-desc" id="htu-opt2-desc"></p>
+        <pre class="code-block" id="htu-opt2-code"></pre>
+      </div>
     </section>
 
     <section id="section-case-study">
       <div class="section-label" id="cs-label"></div>
       <h2 class="section-h" id="cs-h"></h2>
       <p id="cs-body"></p>
-      <pre class="code-block" id="cs-run"></pre>
-      <div class="pull-quote" id="cs-quote"></div>
-      <div class="stats-grid cols-3" id="cs-stats"></div>
     </section>
 
     <section id="section-howbuilt">
@@ -659,8 +680,6 @@
         <a class="cta-secondary" id="cta-secondary" href="#"></a>
       </div>
     </section>
-
-    <div class="byline" id="byline"></div>
 
   </div>
 
@@ -747,68 +766,7 @@ function renderLinks(containerId, links) {
   });
 }
 
-const SAMPLE_RESPONSES = {
-  0: {
-    request: { country: "MX", card_brand: "mastercard", card_type: "debit", amount: 500, currency: "MXN" },
-    ranked: [
-      { archetype: "regional-bank-processor", approval: "94.2%", p50_latency_ms: 98, p95_latency_ms: 221, top_decline: "51 (insufficient funds)", est_fee_usd: 0.21 },
-      { archetype: "global-acquirer", approval: "91.3%", p50_latency_ms: 198, p95_latency_ms: 412, top_decline: "05 (do not honor)", est_fee_usd: 0.28 },
-      { archetype: "cross-border-fx-specialist", approval: "89.1%", p50_latency_ms: 183, p95_latency_ms: 389, top_decline: "05", est_fee_usd: 0.27 },
-      { archetype: "high-risk-or-orchestrator", approval: "87.4%", p50_latency_ms: 247, p95_latency_ms: 523, top_decline: "51", est_fee_usd: 0.29 }
-    ],
-    recommendation: "regional-bank-processor — issuer proximity wins for MX domestic debit"
-  },
-  1: {
-    request: { country: "BR", method: "pix", amount: 300, currency: "BRL" },
-    ranked: [
-      { archetype: "apm-specialist", approval: "96.8%", p50_latency_ms: 341, p95_latency_ms: 780, top_decline: "voucher-expired (1.8%)", est_fee_usd: 0.15 }
-    ],
-    recommendation: "apm-specialist — PIX is APM-only; global-acquirer / regional-bank-processor do not support this method"
-  },
-  2: {
-    request: { country: "DE", card_brand: "visa", amount: 120, currency: "USD", settle_currency: "EUR" },
-    ranked: [
-      { archetype: "cross-border-fx-specialist", approval: "93.4%", p50_latency_ms: 178, p95_latency_ms: 366, top_decline: "05", est_fee_usd: 0.72, fx_markup_bps: 35 },
-      { archetype: "global-acquirer", approval: "91.8%", p50_latency_ms: 195, p95_latency_ms: 402, top_decline: "05", est_fee_usd: 0.98, fx_markup_bps: 65 }
-    ],
-    recommendation: "cross-border-fx-specialist — 30 bps lower FX markup wins once corridor volume > $10k/month"
-  },
-  3: {
-    request: { country: "US", card_brand: "visa", amount: 2500, three_ds: "v2.2", challenge: true },
-    ranked: [
-      { archetype: "high-risk-or-orchestrator", approval: "87.2%", p50_latency_ms: 247, p95_latency_ms: 523, top_decline: "05", est_fee_usd: 1.82, sca_exemption_used: "TRA" }
-    ],
-    pares_status: "Y",
-    recommendation: "high-risk-or-orchestrator — challenge frictionless via TRA on $2,500 is borderline; expect 8% fallback to OTP"
-  },
-  4: {
-    request: { cascade: true, trigger_code: "05", country: "BR", card_brand: "visa", amount: 300 },
-    attempts: [
-      { step: 1, archetype: "global-acquirer", status: "declined", response_code: "05", latency_ms: 215 },
-      { step: 2, archetype: "regional-bank-processor", status: "authorized", response_code: "00", latency_ms: 112 }
-    ],
-    salvage: "Second-leg authorization on the regional-bank-processor archetype; total round-trip 327 ms, one extra webhook, net approved"
-  },
-  5: {
-    request: { idempotency_key: "idem_abc123", txn: { amount: 300, country: "BR", card_brand: "visa" }, duplicate_within_seconds: 3 },
-    response: {
-      cache_status: "HIT",
-      original_txn_id: "txn_01HXK5Z3RQH7DBA1E3V0MZPK8Y",
-      latency_ms: 0.7,
-      kafka_event_fired: false,
-      webhook_fired: false
-    },
-    note: "Duplicate request returned cached response; no state transition, no Kafka event, no duplicate webhook"
-  },
-  6: {
-    request: { country: "US", card_brand: "visa", card_type: "commercial", amount: 1200, data_level: "L3", line_items: 3 },
-    ranked: [
-      { archetype: "global-acquirer (commercial overlay)", approval: "93.6%", p50_latency_ms: 212, p95_latency_ms: 438, interchange_bps: 135, l3_downgrade_risk: "low" },
-      { archetype: "global-acquirer (L2 only)", approval: "91.1%", p50_latency_ms: 198, p95_latency_ms: 412, interchange_bps: 185, l3_downgrade_risk: "n/a" }
-    ],
-    recommendation: "L3 capture saves 50 bps of interchange; confirm all line items pass edit checks to avoid downgrade"
-  }
-};
+let SAMPLE_RESPONSES = {};
 
 function renderChips(chips) {
   const el = $('panel-chips');
@@ -852,8 +810,6 @@ async function loadContent() {
   setText('hero-h1', c.hero.h1);
   setText('hero-sub', c.hero.sub);
   document.title = c.hero.h1;
-  setText('hero-install-cmd', c.hero.install_command);
-  renderStats('hero-stats', c.hero.stats);
 
   // What
   setText('what-label', c.section_what.label);
@@ -875,27 +831,28 @@ async function loadContent() {
   setText('who-h', c.section_who.heading);
   setHTML('who-body', c.section_who.body);
 
-  // What it does
-  setText('wid-label', c.section_what_it_does.label);
-  setText('wid-h', c.section_what_it_does.heading);
-  setText('wid-lead', c.section_what_it_does.heading_lead);
-  renderPoints('wid-points', c.section_what_it_does.points);
-
-  // How to use it
+  // How to use it — two options
   if (c.section_how_to_use) {
-    setText('htu-label', c.section_how_to_use.label);
-    setText('htu-h', c.section_how_to_use.heading);
-    setHTML('htu-body', c.section_how_to_use.body);
-    setText('htu-code', c.section_how_to_use.code || '');
+    const h = c.section_how_to_use;
+    setText('htu-label', h.label);
+    setText('htu-h', h.heading);
+    const htuBody = $('htu-body');
+    if (htuBody) {
+      htuBody.innerHTML = h.body || '';
+      htuBody.style.display = h.body ? '' : 'none';
+    }
+    setText('htu-opt1-title', h.option_1_title);
+    setHTML('htu-opt1-desc', h.option_1_desc);
+    setText('htu-opt1-code', h.option_1_code || '');
+    setText('htu-opt2-title', h.option_2_title);
+    setHTML('htu-opt2-desc', h.option_2_desc);
+    setText('htu-opt2-code', h.option_2_code || '');
   }
 
   // Case study
   setText('cs-label', c.section_case_study.label);
   setText('cs-h', c.section_case_study.heading);
   setHTML('cs-body', c.section_case_study.body);
-  setText('cs-run', c.section_case_study.run_command || '');
-  setText('cs-quote', c.section_case_study.pull_quote);
-  renderStats('cs-stats', c.section_case_study.stats);
 
   // How it's built
   setText('hb-label', c.section_howbuilt.label);
@@ -915,33 +872,13 @@ async function loadContent() {
   ctaSec.rel = 'noopener';
   setText('cta-secondary', c.cta.secondary_text);
 
-  // Byline
-  setText('byline', c.byline || '');
-
   // Right panel
   setText('panel-status-text', (c.right_panel.status_pill || 'Live').replace(/^●\s*/, ''));
   setText('panel-title', c.right_panel.title);
   setText('panel-sub', c.right_panel.subtitle);
   setText('panel-chips-label', c.right_panel.chips_label);
   renderChips(c.right_panel.chips);
-}
-
-// Click-to-copy on the install command
-const installEl = $('hero-install');
-if (installEl) {
-  const copy = () => {
-    const cmd = $('hero-install-cmd').textContent.trim();
-    navigator.clipboard.writeText(cmd).then(() => {
-      const hint = $('hero-install-hint');
-      const prev = hint.textContent;
-      hint.textContent = 'Copied';
-      setTimeout(() => { hint.textContent = prev; }, 1400);
-    });
-  };
-  installEl.addEventListener('click', copy);
-  installEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); copy(); }
-  });
+  SAMPLE_RESPONSES = c.right_panel_responses || {};
 }
 
 loadContent().catch(err => {

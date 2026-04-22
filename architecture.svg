@@ -1,133 +1,181 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 680" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 920" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
   <style>
-    .box { fill: #fff; stroke: #111; stroke-width: 1.5; }
-    .box-accent { fill: #fff7e6; stroke: #d97706; stroke-width: 1.8; }
-    .box-muted { fill: #f6f6f6; stroke: #888; stroke-width: 1.2; }
-    .label { font-size: 13px; fill: #111; }
-    .sub { font-size: 11px; fill: #555; }
-    .title { font-size: 15px; font-weight: 600; fill: #111; }
-    .section-title { font-size: 12px; fill: #888; font-weight: 600; letter-spacing: 0.08em; }
-    .arrow { fill: none; stroke: #111; stroke-width: 1.4; marker-end: url(#arrow); }
-    .arrow-dash { fill: none; stroke: #888; stroke-width: 1.2; stroke-dasharray: 4 3; marker-end: url(#arrow); }
-    .pill { fill: #fff7e6; stroke: #d97706; stroke-width: 1; }
-    .caption { font-size: 11px; fill: #444; }
+    .title { font-size: 18px; font-weight: 600; fill: #111; }
+    .subtitle { font-size: 13px; fill: #555; }
+    .section-label { font-size: 11px; fill: #8a8a8a; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+    .box { fill: #ffffff; stroke: #1a1a1a; stroke-width: 1.4; }
+    .box-accent { fill: #fff7e6; stroke: #c6a668; stroke-width: 1.8; }
+    .box-soft { fill: #f7f7f5; stroke: #bdbdbd; stroke-width: 1.2; }
+    .box-engine { fill: #ffffff; stroke: #c6a668; stroke-width: 1.6; }
+    .box-outside { fill: #fafafa; stroke: #888; stroke-width: 1.2; stroke-dasharray: 5 3; }
+    .box-title { font-size: 14px; font-weight: 600; fill: #111; }
+    .box-desc { font-size: 11.5px; fill: #444; }
+    .box-desc-small { font-size: 10.5px; fill: #555; }
+    .arrow { fill: none; stroke: #222; stroke-width: 1.6; marker-end: url(#arrow); }
+    .arrow-dashed { fill: none; stroke: #888; stroke-width: 1.3; stroke-dasharray: 5 4; marker-end: url(#arrow); }
+    .flow-label { font-size: 10.5px; fill: #666; font-style: italic; }
+    .pill { fill: #fdf5e6; stroke: #c6a668; stroke-width: 1; }
+    .pill-text { font-size: 10.5px; fill: #6b5626; font-weight: 500; }
   </style>
   <defs>
-    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L8,4 L0,8 z" fill="#111"/>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,4.5 L0,9 z" fill="#222"/>
     </marker>
   </defs>
 
-  <!-- Title -->
-  <text x="20" y="32" class="title">payment-routing-simulator — runtime architecture</text>
-  <text x="20" y="52" class="sub">Every /simulate applies 35 Class-A pattern rules in ~70 µs at p95. Class-B calibration lives in YAML; Class-C sequences live in Postgres + Celery.</text>
+  <!-- ========== HEADER ========== -->
+  <text x="30" y="34" class="title">How a transaction flows through the routing simulator</text>
+  <text x="30" y="56" class="subtitle">A merchant call enters at the left, runs through FastAPI's middleware, hits the simulation engine, and then triggers state writes, event publishing, and webhook delivery.</text>
 
-  <!-- Client -->
-  <rect x="20" y="80" width="160" height="60" rx="6" class="box"/>
-  <text x="100" y="105" text-anchor="middle" class="title">Client</text>
-  <text x="100" y="125" text-anchor="middle" class="sub">curl / chatbot / CI test</text>
+  <!-- ========== SECTION 1: THE CALL ARRIVES ========== -->
+  <text x="30" y="94" class="section-label">1 · The call arrives</text>
+
+  <!-- Merchant -->
+  <rect x="30" y="110" width="200" height="90" rx="8" class="box"/>
+  <text x="130" y="138" text-anchor="middle" class="box-title">Merchant</text>
+  <text x="130" y="160" text-anchor="middle" class="box-desc">Calls the API from an</text>
+  <text x="130" y="177" text-anchor="middle" class="box-desc">integration test, chatbot,</text>
+  <text x="130" y="194" text-anchor="middle" class="box-desc">or CI pipeline.</text>
 
   <!-- Caddy -->
-  <rect x="260" y="80" width="220" height="60" rx="6" class="box"/>
-  <text x="370" y="105" text-anchor="middle" class="title">Caddy (reverse proxy)</text>
-  <text x="370" y="125" text-anchor="middle" class="sub">TLS :443 → handle_path /router/* → :8090</text>
+  <rect x="270" y="110" width="250" height="90" rx="8" class="box"/>
+  <text x="395" y="138" text-anchor="middle" class="box-title">Caddy reverse proxy</text>
+  <text x="395" y="160" text-anchor="middle" class="box-desc">Terminates HTTPS and sends</text>
+  <text x="395" y="177" text-anchor="middle" class="box-desc">every `/router/*` request to the</text>
+  <text x="395" y="194" text-anchor="middle" class="box-desc">FastAPI container on port 8090.</text>
 
-  <!-- FastAPI big box -->
-  <rect x="20" y="180" width="960" height="200" rx="10" class="box-accent"/>
-  <text x="40" y="205" class="section-title">FASTAPI (uvicorn :8090, Docker container)</text>
+  <!-- arrows -->
+  <path class="arrow" d="M230 155 L268 155"/>
+  <path class="arrow-dashed" d="M268 172 L230 172"/>
+  <text x="249" y="148" text-anchor="middle" class="flow-label">request</text>
+  <text x="249" y="188" text-anchor="middle" class="flow-label">response</text>
 
-  <!-- Auth middleware -->
-  <rect x="40" y="220" width="180" height="60" rx="6" class="box"/>
-  <text x="130" y="243" text-anchor="middle" class="label">API key auth</text>
-  <text x="130" y="262" text-anchor="middle" class="sub">SHA-256 hash lookup</text>
+  <path class="arrow" d="M395 202 L395 232"/>
 
-  <!-- Idempotency -->
-  <rect x="240" y="220" width="180" height="60" rx="6" class="box"/>
-  <text x="330" y="243" text-anchor="middle" class="label">Idempotency</text>
-  <text x="330" y="262" text-anchor="middle" class="sub">Redis 24h TTL per key</text>
+  <!-- ========== SECTION 2: FASTAPI ========== -->
+  <text x="30" y="258" class="section-label">2 · FastAPI checks the request, then runs the simulation</text>
 
-  <!-- Rate limit -->
-  <rect x="440" y="220" width="180" height="60" rx="6" class="box"/>
-  <text x="530" y="243" text-anchor="middle" class="label">Rate limit</text>
-  <text x="530" y="262" text-anchor="middle" class="sub">100 req/min/key · 60/IP</text>
+  <!-- Big FastAPI container -->
+  <rect x="30" y="275" width="1140" height="280" rx="12" class="box-accent"/>
+  <text x="50" y="298" class="section-label" style="letter-spacing: 0.1em">FASTAPI · uvicorn :8090 · Docker</text>
 
-  <!-- Body size -->
-  <rect x="640" y="220" width="180" height="60" rx="6" class="box"/>
-  <text x="730" y="243" text-anchor="middle" class="label">Body size cap</text>
-  <text x="730" y="262" text-anchor="middle" class="sub">1 MB max</text>
+  <!-- Middleware row -->
+  <text x="50" y="322" class="flow-label">Gate row · each middleware can reject the request before it reaches the engine.</text>
 
-  <!-- Engine — split into YAML load, draw, pattern_rules -->
-  <rect x="40" y="300" width="240" height="60" rx="6" class="box"/>
-  <text x="160" y="323" text-anchor="middle" class="label">Engine — YAML loader</text>
-  <text x="160" y="342" text-anchor="middle" class="sub">provider_loader → archetype profile</text>
+  <rect x="50" y="335" width="260" height="90" rx="6" class="box"/>
+  <text x="180" y="360" text-anchor="middle" class="box-title">Size check</text>
+  <text x="180" y="382" text-anchor="middle" class="box-desc">Rejects any request body</text>
+  <text x="180" y="399" text-anchor="middle" class="box-desc">larger than 1 MB before it</text>
+  <text x="180" y="416" text-anchor="middle" class="box-desc">reaches the auth layer.</text>
 
-  <rect x="300" y="300" width="240" height="60" rx="6" class="box"/>
-  <text x="420" y="323" text-anchor="middle" class="label">Probability draws</text>
-  <text x="420" y="342" text-anchor="middle" class="sub">approval · latency · 3DS · decline code</text>
+  <rect x="330" y="335" width="260" height="90" rx="6" class="box"/>
+  <text x="460" y="360" text-anchor="middle" class="box-title">Authentication</text>
+  <text x="460" y="382" text-anchor="middle" class="box-desc">Validates the Bearer API key</text>
+  <text x="460" y="399" text-anchor="middle" class="box-desc">(SHA-256 lookup). Returns 401</text>
+  <text x="460" y="416" text-anchor="middle" class="box-desc">if missing or wrong.</text>
 
-  <rect x="560" y="300" width="260" height="60" rx="6" class="box-accent"/>
-  <text x="690" y="322" text-anchor="middle" class="title">pattern_rules</text>
-  <text x="690" y="340" text-anchor="middle" class="sub">35 Class-A invariants · shared with generator</text>
+  <rect x="610" y="335" width="260" height="90" rx="6" class="box"/>
+  <text x="740" y="360" text-anchor="middle" class="box-title">Rate limit</text>
+  <text x="740" y="382" text-anchor="middle" class="box-desc">Caps each API key at 100</text>
+  <text x="740" y="399" text-anchor="middle" class="box-desc">calls/min and each client IP</text>
+  <text x="740" y="416" text-anchor="middle" class="box-desc">at 60/min. Returns 429 on over-use.</text>
 
-  <!-- Response -->
-  <rect x="840" y="300" width="140" height="60" rx="6" class="box"/>
-  <text x="910" y="323" text-anchor="middle" class="label">Response</text>
-  <text x="910" y="342" text-anchor="middle" class="sub">JSON out</text>
+  <rect x="890" y="335" width="260" height="90" rx="6" class="box"/>
+  <text x="1020" y="360" text-anchor="middle" class="box-title">Duplicate check</text>
+  <text x="1020" y="382" text-anchor="middle" class="box-desc">If the caller sends the same</text>
+  <text x="1020" y="399" text-anchor="middle" class="box-desc">`Idempotency-Key` within 24 h,</text>
+  <text x="1020" y="416" text-anchor="middle" class="box-desc">returns the cached response.</text>
 
-  <!-- Backing services row -->
-  <text x="20" y="420" class="section-title">BACKING SERVICES (Docker Compose — internal network)</text>
+  <!-- funnel arrow from middleware to engine -->
+  <path class="arrow" d="M600 430 L600 452"/>
 
-  <rect x="20" y="435" width="220" height="80" rx="6" class="box"/>
-  <text x="130" y="460" text-anchor="middle" class="title">Postgres 16</text>
-  <text x="130" y="482" text-anchor="middle" class="sub">state machine</text>
-  <text x="130" y="500" text-anchor="middle" class="sub">PENDING → AUTHORIZED → …</text>
+  <!-- Engine row label -->
+  <text x="50" y="449" class="flow-label">Engine row · the simulation itself — loads the acquirer profile, draws outcomes, applies rules, returns JSON.</text>
 
-  <rect x="260" y="435" width="220" height="80" rx="6" class="box"/>
-  <text x="370" y="460" text-anchor="middle" class="title">Redis 7</text>
-  <text x="370" y="482" text-anchor="middle" class="sub">idempotency + rate-limit</text>
-  <text x="370" y="500" text-anchor="middle" class="sub">Celery broker</text>
+  <rect x="50" y="460" width="260" height="80" rx="6" class="box-engine"/>
+  <text x="180" y="484" text-anchor="middle" class="box-title">Load acquirer profile</text>
+  <text x="180" y="506" text-anchor="middle" class="box-desc">Reads the YAML for the chosen</text>
+  <text x="180" y="523" text-anchor="middle" class="box-desc">archetype (global-acquirer, etc.).</text>
 
-  <rect x="500" y="435" width="220" height="80" rx="6" class="box"/>
-  <text x="610" y="460" text-anchor="middle" class="title">Kafka (KRaft)</text>
-  <text x="610" y="482" text-anchor="middle" class="sub">payment.events topic</text>
-  <text x="610" y="500" text-anchor="middle" class="sub">fire-and-forget producer</text>
+  <rect x="330" y="460" width="260" height="80" rx="6" class="box-engine"/>
+  <text x="460" y="484" text-anchor="middle" class="box-title">Draw outcomes</text>
+  <text x="460" y="506" text-anchor="middle" class="box-desc">Samples approval, latency, 3DS</text>
+  <text x="460" y="523" text-anchor="middle" class="box-desc">flow, and decline code.</text>
 
-  <rect x="740" y="435" width="220" height="80" rx="6" class="box"/>
-  <text x="850" y="460" text-anchor="middle" class="title">Celery worker</text>
-  <text x="850" y="482" text-anchor="middle" class="sub">HMAC-SHA256 webhooks</text>
-  <text x="850" y="500" text-anchor="middle" class="sub">backoff 1–2–4–8–16 s</text>
+  <rect x="610" y="460" width="260" height="80" rx="6" class="box-engine"/>
+  <text x="740" y="484" text-anchor="middle" class="box-title">Apply correctness rules</text>
+  <text x="740" y="506" text-anchor="middle" class="box-desc">35 rules block impossible</text>
+  <text x="740" y="523" text-anchor="middle" class="box-desc">combos (e.g., 3DS on MIT).</text>
 
-  <!-- Arrows -->
-  <path class="arrow" d="M180 110 L260 110"/>
-  <path class="arrow" d="M370 140 L370 175"/>
-  <path class="arrow" d="M130 280 L130 300"/>
-  <path class="arrow" d="M280 330 L300 330"/>
-  <path class="arrow" d="M540 330 L560 330"/>
-  <path class="arrow" d="M820 330 L840 330"/>
+  <rect x="890" y="460" width="260" height="80" rx="6" class="box"/>
+  <text x="1020" y="484" text-anchor="middle" class="box-title">Build the JSON response</text>
+  <text x="1020" y="506" text-anchor="middle" class="box-desc">Returns decline code, latency,</text>
+  <text x="1020" y="523" text-anchor="middle" class="box-desc">3DS status, txn ID, and state.</text>
 
-  <!-- FastAPI to backing services -->
-  <path class="arrow-dash" d="M160 360 L130 435"/>
-  <path class="arrow-dash" d="M420 360 L370 435"/>
-  <path class="arrow-dash" d="M690 360 L610 435"/>
+  <!-- arrows between engine stages -->
+  <path class="arrow" d="M310 500 L328 500"/>
+  <path class="arrow" d="M590 500 L608 500"/>
+  <path class="arrow" d="M870 500 L888 500"/>
 
-  <!-- Redis → Celery -->
-  <path class="arrow" d="M480 475 L740 475"/>
+  <!-- ========== SECTION 3: STATE + EVENTS ========== -->
+  <text x="30" y="596" class="section-label">3 · After each call, the system writes state and fans out events</text>
 
-  <!-- Celery → external webhook receiver -->
-  <rect x="740" y="560" width="220" height="60" rx="6" class="box-muted"/>
-  <text x="850" y="583" text-anchor="middle" class="label">Merchant webhook URL</text>
-  <text x="850" y="602" text-anchor="middle" class="sub">X-Signature-256 · X-Event-Type</text>
-  <path class="arrow" d="M850 515 L850 560"/>
+  <!-- Postgres -->
+  <rect x="30" y="615" width="270" height="130" rx="8" class="box-soft"/>
+  <text x="165" y="640" text-anchor="middle" class="box-title">Payment ledger (Postgres)</text>
+  <text x="165" y="664" text-anchor="middle" class="box-desc">Stores every transaction and</text>
+  <text x="165" y="681" text-anchor="middle" class="box-desc">every state transition. Rejects</text>
+  <text x="165" y="698" text-anchor="middle" class="box-desc">illegal moves with HTTP 409.</text>
+  <rect x="48" y="708" width="234" height="26" rx="4" class="pill"/>
+  <text x="165" y="725" text-anchor="middle" class="pill-text">Pending → Authorized → Captured → Refunded</text>
 
-  <!-- Offline dataset box -->
-  <rect x="20" y="560" width="480" height="90" rx="6" class="box-muted"/>
-  <text x="260" y="585" text-anchor="middle" class="section-title">OFFLINE — DATASET GENERATION (one-shot)</text>
-  <text x="260" y="610" text-anchor="middle" class="label">scripts/generate_routing_transactions.py</text>
-  <text x="260" y="628" text-anchor="middle" class="sub">YAMLs + pattern_rules post-build sweep → routing_transactions.csv (106,739 rows)</text>
-  <text x="260" y="646" text-anchor="middle" class="sub">audit artifact · P3 ML training data · drift detector</text>
+  <!-- Redis -->
+  <rect x="320" y="615" width="260" height="130" rx="8" class="box-soft"/>
+  <text x="450" y="640" text-anchor="middle" class="box-title">Cache &amp; queue (Redis)</text>
+  <text x="450" y="664" text-anchor="middle" class="box-desc">Three jobs in one store: the</text>
+  <text x="450" y="681" text-anchor="middle" class="box-desc">idempotency cache, the rate-limit</text>
+  <text x="450" y="698" text-anchor="middle" class="box-desc">counter, and the Celery job</text>
+  <text x="450" y="715" text-anchor="middle" class="box-desc">queue for webhooks.</text>
 
-  <!-- shared pattern_rules link to offline -->
-  <path class="arrow-dash" d="M560 360 Q 400 480 260 560"/>
-  <text x="360" y="440" class="caption">shared</text>
+  <!-- Kafka -->
+  <rect x="600" y="615" width="260" height="130" rx="8" class="box-soft"/>
+  <text x="730" y="640" text-anchor="middle" class="box-title">Event stream (Kafka)</text>
+  <text x="730" y="664" text-anchor="middle" class="box-desc">Publishes every state change</text>
+  <text x="730" y="681" text-anchor="middle" class="box-desc">to the `payment.events` topic,</text>
+  <text x="730" y="698" text-anchor="middle" class="box-desc">so analytics and ML pipelines</text>
+  <text x="730" y="715" text-anchor="middle" class="box-desc">can replay the full history.</text>
+
+  <!-- Celery -->
+  <rect x="880" y="615" width="290" height="130" rx="8" class="box-soft"/>
+  <text x="1025" y="640" text-anchor="middle" class="box-title">Webhook delivery (Celery)</text>
+  <text x="1025" y="664" text-anchor="middle" class="box-desc">Signs each event with HMAC-SHA256</text>
+  <text x="1025" y="681" text-anchor="middle" class="box-desc">and POSTs it to the merchant's URL.</text>
+  <text x="1025" y="698" text-anchor="middle" class="box-desc">Retries failed sends with backoff</text>
+  <text x="1025" y="715" text-anchor="middle" class="box-desc">1 → 2 → 4 → 8 → 16 s, then DLQ.</text>
+
+  <!-- Arrows from FastAPI engine to persistence -->
+  <path class="arrow-dashed" d="M165 555 L165 613"/>
+  <path class="arrow-dashed" d="M450 555 L450 613"/>
+  <path class="arrow-dashed" d="M730 555 L730 613"/>
+  <path class="arrow-dashed" d="M1025 555 L1025 613"/>
+
+  <!-- Celery → merchant webhook endpoint -->
+  <rect x="880" y="785" width="290" height="60" rx="8" class="box-outside"/>
+  <text x="1025" y="809" text-anchor="middle" class="box-title">Merchant's webhook URL</text>
+  <text x="1025" y="828" text-anchor="middle" class="box-desc-small">Receives signed `payment.*` events and verifies the HMAC header.</text>
+  <path class="arrow" d="M1025 745 L1025 783"/>
+
+  <!-- ========== SECTION 4: OFFLINE ========== -->
+  <text x="30" y="786" class="section-label">4 · Same engine, batch mode (offline)</text>
+
+  <rect x="30" y="805" width="820" height="90" rx="8" class="box-soft"/>
+  <text x="440" y="832" text-anchor="middle" class="box-title">Synthetic dataset generator</text>
+  <text x="440" y="854" text-anchor="middle" class="box-desc">Runs the same engine + same 35 rules against 106,739 synthetic transactions,</text>
+  <text x="440" y="871" text-anchor="middle" class="box-desc">producing a CSV used for regression testing and as training data for the</text>
+  <text x="440" y="888" text-anchor="middle" class="box-desc">decline-recovery ML model. If live API output diverges from the CSV, that's a bug.</text>
+
+  <!-- shared-module link: from "apply rules" box down along right margin into the offline box -->
+  <path class="arrow-dashed" d="M740 540 L740 575 L1185 575 L1185 770 L850 770 L850 805"/>
+  <text x="955" y="765" text-anchor="middle" class="flow-label">same rule module — online and offline stay consistent</text>
 </svg>

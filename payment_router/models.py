@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from enum import Enum
 from typing import Optional
-from pydantic import AnyHttpUrl, BaseModel, Field, field_validator
+from pydantic import AnyHttpUrl, BaseModel, Field, field_validator, model_validator
 
 _PROVIDER_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,63}$")
 _COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
@@ -59,10 +59,48 @@ class PaResStatus(str, Enum):
 
 
 # ---------------------------------------------------------------------------
+# PCI DSS guardrail — reject cardholder data at the API surface
+# ---------------------------------------------------------------------------
+
+_CARDHOLDER_DATA_FIELDS = frozenset({
+    "pan", "card_number", "primary_account_number", "cardnumber", "account_number",
+    "cvv", "cvc", "cvv2", "cvc2", "cvn", "security_code",
+    "track1", "track2", "track_data", "magstripe",
+    "cardholder_name", "card_holder_name", "name_on_card",
+    "pin", "pin_block",
+})
+
+
+class _RejectCardholderData(BaseModel):
+    """Base model that rejects PAN/CVV/track/PIN fields in the request body.
+
+    This router is out of PCI DSS scope because it accepts only BIN,
+    card brand/type, country, and amount — never a full card number or
+    sensitive authentication data. Enforce at the API surface so callers
+    cannot accidentally push cardholder data into the simulator.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _forbid_cardholder_data(cls, data):
+        if isinstance(data, dict):
+            bad = sorted(k for k in data.keys() if str(k).lower() in _CARDHOLDER_DATA_FIELDS)
+            if bad:
+                raise ValueError(
+                    "This endpoint does not accept cardholder data. "
+                    f"Disallowed field(s): {bad}. Send country, card brand, card type, "
+                    "amount, and currency; BIN (bin_first6) may be sent. Full PAN, CVV, "
+                    "track data, cardholder name, and PIN must never be sent — this is a "
+                    "PCI DSS scope boundary."
+                )
+        return data
+
+
+# ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
 
-class SimulateRequest(BaseModel):
+class SimulateRequest(_RejectCardholderData):
     provider: str = Field(..., description="Provider name")
     country: str = Field(..., description="ISO 3166-1 alpha-2 merchant country code")
     issuer_country: Optional[str] = Field(
@@ -190,7 +228,7 @@ class ProviderResponse(BaseModel):
     bin_first6: Optional[str] = None
 
 
-class CompareRequest(BaseModel):
+class CompareRequest(_RejectCardholderData):
     country: str
     issuer_country: Optional[str] = None
     card_brand: CardBrand = CardBrand.VISA

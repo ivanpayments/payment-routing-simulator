@@ -159,6 +159,18 @@ python scripts/benchmark.py --runs 2000
 
 ---
 
+## Data & PCI scope
+
+This simulator is **out of PCI DSS scope by design**. The 106,739-row dataset used to derive provider profiles is **100% synthetic** — no real transactions, no real cards, no real merchants. The API contract never accepts cardholder data:
+
+- **Accepted request fields**: `country`, `issuer_country`, `card_brand`, `card_type`, `amount`, `currency`, `use_3ds`, `bin_first6` (and internal routing flags). These fall outside PCI DSS scope.
+- **Rejected fields**: any request containing `pan`, `card_number`, `cvv`, `cvc`, `track1`, `track2`, `cardholder_name`, `pin`, or similar is rejected with a 422 and an explicit PCI-boundary error message. See `payment_router.models._RejectCardholderData`.
+- **Responses** echo only the categorical inputs plus simulation outputs (approval rate, response code, latency, 3DS result). No cardholder data is stored, logged, or emitted.
+
+If this API were ever to process real payments, the PCI DSS scope boundary would shift immediately to the entire deployment — the architectural contract here (synthetic data in, synthetic data out) is what keeps it out of scope.
+
+---
+
 ## Architecture
 
 - **No network calls** — fully local, deterministic per seed, no external dependencies at runtime

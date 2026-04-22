@@ -1,95 +1,313 @@
 {
   "hero": {
     "uptitle": "Payments infrastructure",
-    "h1": "A mock payment gateway for integration engineers shipping multi-PSP setups",
-    "sub": "Sandboxes return the response the caller asks for. This one returns the response a merchant would actually see in production — real decline codes, 3DS flows, latency, webhook delivery",
-    "install_command": "pip install payment-routing-simulator",
-    "stats": [
-      { "k": "Processor archetypes", "v": "5" },
-      { "k": "Synthetic transaction rows", "v": "10,000" },
-      { "k": "Python package", "v": "On PyPI" }
-    ]
+    "h1": "A payment routing simulator for merchant teams building new PSP integrations",
+    "sub": "Most PSP sandboxes produce too clean outputs to test real routing logic. This simulator helps returns the kinds of outcomes merchants actually see in production: realistic soft vs hard declines, 3DS behavior, latency spikes, cross-border BIN penalties etc.",
+    "install_command": "",
+    "stats": []
   },
   "section_what": {
     "label": "What it is",
-    "heading": "One tool that emulates five kinds of payment processors",
-    "body": "A Python package and REST API that models five processor archetypes — global acquirer, regional bank processor, APM specialist, cross-border FX specialist, high-risk / orchestrator. Each has its own approval rates, decline codes, latency, 3DS behaviour and fees, fitted from a 10,000-row synthetic dataset"
+    "heading": "A realistic test environment for merchant integration and routing logic",
+    "body": "The Payment Routing Simulator emulates how different processor types behave when a merchant sends them card transactions. Instead of always returning clean sandbox approvals, it models approval rates, decline codes, latency, 3DS behavior, cross-border gaps, and retry outcomes. Merchant can simulate the behaviour by  across five processor archetypes"
   },
   "section_why": {
-    "label": "The problem it solves",
-    "heading": "Test environments don't reflect production, so routing bugs show up when customers complain",
+    "label": "Why it matters",
+    "heading": "Routing decisions are usually tested in environments that do not reflect production",
     "body": "",
     "points": [
-      "<b>Stripe's test mode always approves.</b> You cannot ask \"what happens when a global acquirer soft-declines a Brazilian Visa at $300?\" — the sandbox is not wired to answer it",
-      "<b>Every processor's sandbox behaves differently.</b> Regression-testing routing logic across four or five providers means maintaining four or five test harnesses",
-      "<b>Edge cases only surface in production.</b> 3DS challenges, country-specific declines, soft-decline retries, webhook races — none reproduce in sandbox"
+      "<b>Sandbox behavior that provider models is often too optimistic, and all too often the edge cases appear only when the integration is in production and customers are seeing payment failures.</b> Real mix of soft declines, issuer outages, latency spikes, authentication challenges are examples of such issues which can be tested with the simulator"
     ]
   },
   "section_who": {
     "label": "Who it's for",
-    "heading": "Integration engineers at merchants, and QA teams shipping routing changes",
-    "body": "Primary user: an integration engineer evaluating or maintaining a multi-PSP setup. Also useful for PSP solutions engineers, product managers comparing providers, and data engineers generating training data for retry models"
-  },
-  "section_what_it_does": {
-    "label": "What the API returns",
-    "heading": "Three things the sandboxes don't",
-    "heading_lead": "Each capability is a concrete transaction path you can hit from the command line or a test suite",
-    "points": [
-      "<b>Realistic decline codes by country and brand.</b> A Brazilian Visa at $300 on the global-acquirer archetype returns ISO 8583 code 05 at the frequency that archetype actually returns it — not a 200 OK",
-      "<b>Full payment state machine in Postgres.</b> PENDING to AUTHORIZED to CAPTURED or VOIDED to REFUNDED, strictly validated. Capturing a declined transaction returns 409 with the valid next states",
-      "<b>HMAC-signed webhooks that survive restarts.</b> Register URL + secret; events fire with X-Signature-256 and retry on 1-2-4-8-16s backoff. Duplicate requests hit a Redis idempotency cache"
-    ]
+    "heading": "Merchant integration teams, QA engineers, solutions teams, and product stakeholders",
+    "body": "Primary user: a merchant-side engineer or QA lead who needs to validate routing behavior before launch. Secondary users: PSP solutions engineers demonstrating realistic flows, product managers evaluating routing strategies, and data teams generating synthetic payment outcomes for analytics or ML experiments."
   },
   "section_how_to_use": {
     "label": "Try it yourself",
-    "heading": "Install it, hit the endpoint",
-    "body": "Three lines gets you a running simulator plus one comparison call:",
-    "code": "pip install payment-routing-simulator\nprs serve &\ncurl -X POST localhost:8080/api/compare -d '{\"country\":\"BR\",\"brand\":\"visa\",\"amount\":300}'"
+    "heading": "Two ways to hit the live API",
+    "body": "",
+    "option_1_title": "Option 1 — rank every acquirer for this transaction profile",
+    "option_1_desc": "Use <code>/compare</code> when you want every acquirer ranked against the same transaction profile. Returns each archetype with expected approval rate, latency, top decline code, and fee",
+    "option_1_code": "curl -X POST https://ivanantonov.com/router/compare \\\n  -H 'Authorization: Bearer $SK_TEST' \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"country\":\"BR\",\"card_brand\":\"visa\",\"amount\":300}'",
+    "option_2_title": "Option 2 — test one specific acquirer archetype",
+    "option_2_desc": "Use <code>/simulate</code> when you want to test a single provider by name. The full list of 11 provider names is returned by <code>GET /providers</code>",
+    "option_2_code": "curl -X POST https://ivanantonov.com/router/simulate \\\n  -H 'Authorization: Bearer $SK_TEST' \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"provider\":\"global-acquirer-a\",\"country\":\"BR\",\"card_brand\":\"visa\",\"amount\":300}'"
   },
   "section_case_study": {
-    "label": "Run the replay",
-    "heading": "Run the included replay on a committed dataset in 30 seconds",
-    "body": "One script replays a $50M synthetic DTC apparel book through two routing configs — a single global-acquirer baseline, and a per-corridor archetype selection with soft-decline cascade, network tokens, and EEA SCA exemptions. The CSV is committed, so the output is identical on every run. Full decomposition, pattern IDs, and SQL in <code>case_study.pdf</code>",
-    "run_command": "git clone github.com/ivanpayments/payment-routing-simulator && python scripts/run_case_study.py",
-    "pull_quote": "+2.3 pp authorization, 22% soft-decline salvage within 24 hours, -18 bps effective fee. Every number traces to a CSV column",
-    "stats": [
-      { "k": "Book GMV replayed", "v": "$50M" },
-      { "k": "Replay wall-clock time", "v": "30 s" },
-      { "k": "Data source", "v": "10k-row synthetic CSV" }
-    ]
+    "label": "Re-run the transaction",
+    "heading": "Re-run a transaction through different routing strategies",
+    "body": "A built-in replay flow lets teams run the same transaction list through different routing setups and compare what changes: approvals, latency, retry salvage, and fee impact. That makes the simulator useful not just for individual transaction tests, but also for explaining the business effect of a routing policy to non-engineering stakeholders.",
+    "run_command": "",
+    "pull_quote": "",
+    "stats": []
   },
   "section_howbuilt": {
     "label": "Stack",
-    "heading": "FastAPI in front of Postgres, Redis, Kafka and Celery, behind Caddy",
-    "body_part1": "FastAPI validates the API key, checks Redis for idempotency, and passes a sliding-window rate limit. The engine loads archetype YAML, samples approval against country and brand modifiers, and draws latency from a log-normal fit. Every state transition writes to Postgres and publishes to Kafka. Celery workers HMAC-sign the payload and post with exponential backoff",
-    "body_part2": "The chatbot at <a href=\"/chatbot/\">ivanantonov.com/chatbot</a> calls this simulator's <code>/recommend-route</code> endpoint to rank archetypes by expected approval, latency and fee",
+    "heading": "An API-first simulator with state, retries, and event delivery",
+    "body_part1": "Under the hood, the simulator is built as a FastAPI service backed by a payment state model, idempotency handling, webhook delivery, and processor profile logic. The goal is not to reproduce every production detail of a PSP, but to reproduce the parts that matter most when teams are testing routing logic and downstream payment handling.",
+    "body_part2": "It also connects naturally to the wider portfolio: the chatbot can use it as a routing intelligence backend, and the same synthetic payment world can later feed replay analysis and recovery-model training.",
     "links": [
-      { "label": "GitHub repo", "href": "https://github.com/ivanpayments/payment-routing-simulator" },
-      { "label": "PyPI package", "href": "https://pypi.org/project/payment-routing-simulator/" },
-      { "label": "OpenAPI docs", "href": "/routing-simulator/api/docs" }
+      {
+        "label": "OpenAPI docs",
+        "href": "/router/docs"
+      },
+      {
+        "label": "Architecture diagram",
+        "href": "/routing-simulator/architecture.svg"
+      },
+      {
+        "label": "Live health",
+        "href": "/router/health"
+      }
     ]
   },
-  "byline": "Built by Ivan Antonov — ex-ING Payments PM, Yuno payment-ops strategy",
+  "byline": "",
   "cta": {
-    "text": "Read the OpenAPI docs",
+    "text": "Explore the routing simulator",
     "arrow": "→",
-    "primary_href": "/routing-simulator/api/docs",
-    "secondary_text": "pip install payment-routing-simulator",
-    "secondary_href": "https://pypi.org/project/payment-routing-simulator/"
+    "primary_href": "/router/docs",
+    "secondary_text": "",
+    "secondary_href": ""
   },
   "right_panel": {
     "status_pill": "● Live",
     "title": "Compare archetypes",
-    "subtitle": "Pick a comparison to see the request and the ranked response the live /api/compare endpoint returns",
+    "subtitle": "Pick a comparison to see the request and the ranked response the live /router/compare endpoint returns",
     "chips_label": "Try a comparison",
     "chips": [
-      { "archetype_pair": "Global-acquirer vs regional-bank-processor", "request": "Mexican MasterCard debit at $500" },
-      { "archetype_pair": "APM-specialist", "request": "Brazilian PIX payment at R$300" },
-      { "archetype_pair": "Cross-border-FX-specialist vs global-acquirer", "request": "USD→EUR Visa at $120" },
-      { "archetype_pair": "High-risk-orchestrator", "request": "US Visa $2,500 with 3DS v2.2 challenge" },
-      { "archetype_pair": "Soft-decline cascade: global-acquirer → regional-bank-processor", "request": "Code 05 on BR Visa $300" },
-      { "archetype_pair": "Webhook delivery race", "request": "Idempotency key hit on duplicate /simulate within 3s" },
-      { "archetype_pair": "Commercial-card Level-3 vs Level-2 capture", "request": "US Visa $1,200 corporate card with Level-3 line-item data" }
+      {
+        "archetype_pair": "Global-acquirer vs regional-bank-processor",
+        "request": "Mexican Mastercard debit at $500"
+      },
+      {
+        "archetype_pair": "Regional-card-specialist vs global-acquirer",
+        "request": "Spanish Visa prepaid at €45 with EU SCA exemption"
+      },
+      {
+        "archetype_pair": "Cross-border-FX-specialist vs global-acquirer",
+        "request": "USD→EUR Visa at $120"
+      },
+      {
+        "archetype_pair": "High-risk-or-orchestrator",
+        "request": "US Visa $2,500 with 3DS v2.2 challenge"
+      },
+      {
+        "archetype_pair": "Soft-decline cascade: global-acquirer → regional-bank-processor",
+        "request": "Code 05 on BR Visa $300"
+      },
+      {
+        "archetype_pair": "Webhook delivery race",
+        "request": "Idempotency key hit on duplicate /simulate within 3s"
+      },
+      {
+        "archetype_pair": "Commercial-card Level-3 vs Level-2 capture",
+        "request": "US Visa $1,200 corporate card with Level-3 line-item data"
+      }
     ]
+  },
+  "right_panel_responses": {
+    "0": {
+      "request": {
+        "country": "MX",
+        "card_brand": "mastercard",
+        "card_type": "debit",
+        "amount": 500,
+        "currency": "MXN"
+      },
+      "ranked": [
+        {
+          "archetype": "regional-bank-processor",
+          "approval": "94.2%",
+          "p50_latency_ms": 98,
+          "p95_latency_ms": 221,
+          "top_decline": "51 (insufficient funds)",
+          "est_fee_usd": 0.21
+        },
+        {
+          "archetype": "global-acquirer",
+          "approval": "91.3%",
+          "p50_latency_ms": 198,
+          "p95_latency_ms": 412,
+          "top_decline": "05 (do not honor)",
+          "est_fee_usd": 0.28
+        },
+        {
+          "archetype": "cross-border-fx-specialist",
+          "approval": "89.1%",
+          "p50_latency_ms": 183,
+          "p95_latency_ms": 389,
+          "top_decline": "05",
+          "est_fee_usd": 0.27
+        },
+        {
+          "archetype": "high-risk-or-orchestrator",
+          "approval": "87.4%",
+          "p50_latency_ms": 247,
+          "p95_latency_ms": 523,
+          "top_decline": "51",
+          "est_fee_usd": 0.29
+        }
+      ],
+      "recommendation": "regional-bank-processor — issuer proximity wins for MX domestic debit"
+    },
+    "1": {
+      "request": {
+        "country": "ES",
+        "card_brand": "visa",
+        "card_type": "prepaid",
+        "amount": 45,
+        "currency": "EUR",
+        "sca_exemption": "LVP"
+      },
+      "ranked": [
+        {
+          "archetype": "regional-card-specialist",
+          "approval": "92.7%",
+          "p50_latency_ms": 156,
+          "p95_latency_ms": 348,
+          "top_decline": "51",
+          "est_fee_usd": 0.11,
+          "exemption_applied": "LVP"
+        },
+        {
+          "archetype": "global-acquirer",
+          "approval": "88.4%",
+          "p50_latency_ms": 204,
+          "p95_latency_ms": 431,
+          "top_decline": "05",
+          "est_fee_usd": 0.17,
+          "exemption_applied": "none"
+        }
+      ],
+      "recommendation": "regional-card-specialist — LVP exemption avoids 3DS challenge under €30; domestic routing keeps interchange in-region"
+    },
+    "2": {
+      "request": {
+        "country": "DE",
+        "card_brand": "visa",
+        "amount": 120,
+        "currency": "USD",
+        "settle_currency": "EUR"
+      },
+      "ranked": [
+        {
+          "archetype": "cross-border-fx-specialist",
+          "approval": "93.4%",
+          "p50_latency_ms": 178,
+          "p95_latency_ms": 366,
+          "top_decline": "05",
+          "est_fee_usd": 0.72,
+          "fx_markup_bps": 35
+        },
+        {
+          "archetype": "global-acquirer",
+          "approval": "91.8%",
+          "p50_latency_ms": 195,
+          "p95_latency_ms": 402,
+          "top_decline": "05",
+          "est_fee_usd": 0.98,
+          "fx_markup_bps": 65
+        }
+      ],
+      "recommendation": "cross-border-fx-specialist — 30 bps lower FX markup wins once corridor volume > $10k/month"
+    },
+    "3": {
+      "request": {
+        "country": "US",
+        "card_brand": "visa",
+        "amount": 2500,
+        "three_ds": "v2.2",
+        "challenge": true
+      },
+      "ranked": [
+        {
+          "archetype": "high-risk-or-orchestrator",
+          "approval": "87.2%",
+          "p50_latency_ms": 247,
+          "p95_latency_ms": 523,
+          "top_decline": "05",
+          "est_fee_usd": 1.82,
+          "sca_exemption_used": "TRA"
+        }
+      ],
+      "pares_status": "Y",
+      "recommendation": "high-risk-or-orchestrator — challenge frictionless via TRA on $2,500 is borderline; expect 8% fallback to OTP"
+    },
+    "4": {
+      "request": {
+        "cascade": true,
+        "trigger_code": "05",
+        "country": "BR",
+        "card_brand": "visa",
+        "amount": 300
+      },
+      "attempts": [
+        {
+          "step": 1,
+          "archetype": "global-acquirer",
+          "status": "declined",
+          "response_code": "05",
+          "latency_ms": 215
+        },
+        {
+          "step": 2,
+          "archetype": "regional-bank-processor",
+          "status": "authorized",
+          "response_code": "00",
+          "latency_ms": 112
+        }
+      ],
+      "salvage": "Second-leg authorization on the regional-bank-processor archetype; total round-trip 327 ms, one extra webhook, net approved"
+    },
+    "5": {
+      "request": {
+        "idempotency_key": "idem_abc123",
+        "txn": {
+          "amount": 300,
+          "country": "BR",
+          "card_brand": "visa"
+        },
+        "duplicate_within_seconds": 3
+      },
+      "response": {
+        "cache_status": "HIT",
+        "original_txn_id": "txn_01HXK5Z3RQH7DBA1E3V0MZPK8Y",
+        "latency_ms": 0.7,
+        "kafka_event_fired": false,
+        "webhook_fired": false
+      },
+      "note": "Duplicate request returned cached response; no state transition, no Kafka event, no duplicate webhook"
+    },
+    "6": {
+      "request": {
+        "country": "US",
+        "card_brand": "visa",
+        "card_type": "commercial",
+        "amount": 1200,
+        "data_level": "L3",
+        "line_items": 3
+      },
+      "ranked": [
+        {
+          "archetype": "global-acquirer (commercial overlay)",
+          "approval": "93.6%",
+          "p50_latency_ms": 212,
+          "p95_latency_ms": 438,
+          "interchange_bps": 135,
+          "l3_downgrade_risk": "low"
+        },
+        {
+          "archetype": "global-acquirer (L2 only)",
+          "approval": "91.1%",
+          "p50_latency_ms": 198,
+          "p95_latency_ms": 412,
+          "interchange_bps": 185,
+          "l3_downgrade_risk": "n/a"
+        }
+      ],
+      "recommendation": "L3 capture saves 50 bps of interchange; confirm all line items pass edit checks to avoid downgrade"
+    }
   }
 }

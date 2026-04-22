@@ -10,7 +10,6 @@ import click
 
 from payment_router import __version__
 from payment_router.provider_loader import list_providers, load_provider
-from payment_router.response_codes import lookup_bin
 
 
 @click.group()
