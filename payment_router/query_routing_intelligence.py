@@ -73,13 +73,18 @@ def query_routing_intelligence(
 
     rankings_raw = compare_providers(req)
 
+    # Filter "00" (approval code) out of top_decline_codes — it should
+    # only contain actual declines. A merchant inspecting the top decline
+    # codes must not see the approval code in the list.
     rankings = [
         {
             "provider": r.provider,
             "approval_rate": round(r.projected_approval_rate, 3),
             "latency_p50_ms": round(r.latency_p50_ms),
             "latency_p95_ms": round(r.latency_p95_ms),
-            "top_decline_codes": list(r.decline_code_distribution.keys())[:3],
+            "top_decline_codes": [
+                code for code in r.decline_code_distribution.keys() if code != "00"
+            ][:3],
             **({"three_ds_challenge_rate": round(r.three_ds_challenge_rate, 3)}
                if r.three_ds_challenge_rate is not None else {}),
         }
@@ -94,10 +99,23 @@ def query_routing_intelligence(
     cross_border_note = ""
     if issuer_country and issuer_country != country:
         tier = get_issuer_tier(issuer_country)
-        tier_labels = {1: "Tier 1 (low friction)", 2: "Tier 2 (moderate friction)", 3: "Tier 3 (high friction)"}
+        tier_labels = {
+            1: "Tier 1 (low friction)",
+            2: "Tier 2 (moderate friction)",
+            3: "Tier 3 (high friction)",
+        }
+        # Tier 1 = no approval drag; Tier 2/3 progressively reduce approvals.
+        # Avoid the prior contradictory phrasing ("Tier 1 (low friction), which
+        # reduces approval rates") — low friction does not reduce approvals.
+        if tier == 1:
+            impact = "has negligible cross-border friction on approval rates"
+        elif tier == 2:
+            impact = "applies moderate cross-border issuer friction (~6pp drag)"
+        else:
+            impact = "applies high cross-border issuer friction (~13pp drag)"
         cross_border_note = (
             f" Note: {issuer_country}-issued card on {country} merchant is cross-border — "
-            f"issuer is {tier_labels[tier]}, which reduces approval rates across all providers."
+            f"issuer is {tier_labels[tier]}, which {impact}."
         )
 
     if second:

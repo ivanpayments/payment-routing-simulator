@@ -38,6 +38,25 @@ APPLY_PATTERN_RULES = os.environ.get("APPLY_PATTERN_RULES", "1") not in ("0", "f
 # Approval probability
 # ---------------------------------------------------------------------------
 
+_CROSS_BORDER_FIT_LIFT: dict[str, float] = {
+    # Archetype-corridor fit: applied only on cross-border transactions.
+    # Positive = specialist advantage, negative = structural misfit.
+    # Calibrated so that for textbook cross-border profiles (e.g. US→DE EUR),
+    # cross-border-fx specialists surface in the top-2 of /compare rankings.
+    "cross-border-fx-specialist-a": 0.08,
+    "cross-border-fx-specialist-b": 0.08,
+    "high-risk-or-orchestrator-a": -0.04,
+    "high-risk-or-orchestrator-b": -0.04,
+    "regional-bank-processor-a": -0.03,
+    "regional-bank-processor-b": -0.03,
+    "regional-bank-processor-c": -0.03,
+    "regional-card-specialist-a": -0.02,
+    "regional-card-specialist-b": -0.02,
+    "global-acquirer-a": 0.00,
+    "global-acquirer-b": 0.00,
+}
+
+
 def _approval_probability(provider_name: str, req: SimulateRequest) -> float:
     profile = load_provider(provider_name)
     cp = profile.country(req.country)
@@ -62,10 +81,16 @@ def _approval_probability(provider_name: str, req: SimulateRequest) -> float:
         base *= profile.card_type_modifiers.commercial
     # CREDIT and UNKNOWN: no modifier (1.0)
 
-    # Issuer country penalty — only applies cross-border (issuer != merchant country)
-    effective_issuer = req.issuer_country or req.country
-    if effective_issuer != req.country:
-        base *= issuer_modifier(effective_issuer)
+    # Cross-border handling — applies only when issuer_country is set AND != country.
+    # Two signals:
+    #   (a) issuer_modifier — tier-based drag, already calibrated in issuer_tiers.py
+    #   (b) archetype-corridor fit — lift for cross-border-fx specialists,
+    #       drag for non-specialists routing outside their home corridor.
+    # Note: _CROSS_BORDER_FIT_LIFT is additive on top of the multiplicative base.
+    if req.issuer_country and req.issuer_country != req.country:
+        base *= issuer_modifier(req.issuer_country)
+        fit_lift = _CROSS_BORDER_FIT_LIFT.get(provider_name, 0.0)
+        base = max(0.0, base + fit_lift)
 
     thresholds = sorted(
         ((float(k), v) for k, v in profile.amount_modifier_thresholds.items()),
@@ -439,7 +464,13 @@ def compare_providers(req: CompareRequest) -> list[CompareResult]:
             if declined_total
             else {}
         )
-        challenge_rate = (challenged_count / N) if req.use_3ds else None
+        # Populate three_ds_challenge_rate from the empirical sample when use_3ds
+        # was requested; otherwise fall back to the YAML-declared challenge rate
+        # for this corridor so the field is never null.
+        if req.use_3ds:
+            challenge_rate = challenged_count / N
+        else:
+            challenge_rate = load_provider(provider_name).effective_three_ds(req.country).challenge_rate
 
         results.append(CompareResult(
             provider=provider_name,

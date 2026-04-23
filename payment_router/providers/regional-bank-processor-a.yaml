@@ -48,16 +48,18 @@ supported_currencies:
   - ARS
 
 amount_modifier_thresholds:
-  "100": 1.00
-  "500": 0.98
-  "1000": 0.95
-  "5000": 0.89
+  "0": 1.00
+  "500": 0.96
+  "1000": 0.91
+  "5000": 0.82
+  "10000": 0.74
 
 countries:
   BR:
     base: 0.89
     card_modifiers:
-      amex: 0.96
+      # BR-tuned regional bank: still sees Amex issuer-penetration gap.
+      amex: 0.88
       mastercard: 1.02
       visa: 1.00
     three_ds:
@@ -66,7 +68,7 @@ countries:
   MX:
     base: 0.84
     card_modifiers:
-      amex: 1.01
+      amex: 0.88
       mastercard: 1.00
       visa: 1.00
     three_ds:

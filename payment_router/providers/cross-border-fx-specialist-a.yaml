@@ -56,11 +56,12 @@ supported_currencies:
   - CHF
 
 amount_modifier_thresholds:
-  "100": 1.00
-  "500": 0.99
-  "1000": 0.98
-  "5000": 0.95
-  "20000": 0.91
+  "0": 1.00
+  "500": 0.97
+  "1000": 0.94
+  "5000": 0.86
+  "10000": 0.80
+  "20000": 0.73
 
 countries:
   SG:
@@ -177,9 +178,12 @@ countries:
       frictionless_rate: 0.80
       version_2_2_rate: 0.72
   BR:
-    base: 0.71
+    # Domestic BR→BR on a cross-border-FX archetype: no FX lift, no local
+    # rails. Realistic drag from non-BR-tuned risk models: calibrated 12pp
+    # below the BR-tuned regional bank (regional-bank-processor-a at 0.89).
+    base: 0.63
     card_modifiers:
-      amex: 0.98
+      amex: 0.88
       mastercard: 1.01
       visa: 0.99
     three_ds:

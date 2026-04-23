@@ -18,6 +18,17 @@ from typing import Optional
 COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
 CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
 
+# ISO 4217 major currencies the provider YAMLs reference, plus common settlement
+# currencies. Anything outside this allowlist rejects with 422 rather than
+# returning a misleading synthetic decline (e.g. code 54 "expired card" for
+# a garbage currency like "XYZ").
+SUPPORTED_CURRENCIES: frozenset[str] = frozenset({
+    "USD", "EUR", "GBP", "CAD", "AUD", "NZD", "CHF", "SEK", "NOK", "DKK",
+    "PLN", "CZK", "HUF", "RON", "BRL", "MXN", "COP", "CLP", "PEN", "ARS",
+    "INR", "SGD", "HKD", "JPY", "AED", "SAR", "ZAR", "THB", "MYR", "IDR",
+    "PHP", "VND", "KRW", "TWD", "CNY",
+})
+
 
 @lru_cache(maxsize=1)
 def supported_countries() -> frozenset[str]:
@@ -87,4 +98,9 @@ def normalize_currency(value: str) -> str:
     v = value.upper().strip()
     if not CURRENCY_RE.match(v):
         raise ValueError("currency must be ISO 4217 (three uppercase letters, e.g. USD)")
+    if v not in SUPPORTED_CURRENCIES:
+        raise ValueError(
+            f"currency '{v}' is not a supported ISO 4217 code. "
+            f"Supported: {', '.join(sorted(SUPPORTED_CURRENCIES))}."
+        )
     return v
