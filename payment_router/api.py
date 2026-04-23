@@ -12,6 +12,7 @@ import redis
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -117,16 +118,22 @@ app.add_middleware(_LimitBodySize)
 # Auth + rate-limit dependency
 # ---------------------------------------------------------------------------
 
+bearer_scheme = HTTPBearer(
+    bearerFormat="sk_test_*",
+    description="Paste a secret API key (sk_test_...). Use sk_test_Nb2TroIRXM2anlnYxWI_OCy7jaQO_Osz for the shared public demo key.",
+    auto_error=False,
+)
+
+
 def get_current_api_key(
     request: Request,
-    authorization: str = Header(default=""),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ):
     """Validate Bearer sk_test_... token and enforce per-key rate limit."""
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
-    token = authorization.removeprefix("Bearer ").strip()
-    api_key = validate_secret_key(db, token)
+    if credentials is None or not credentials.credentials:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    api_key = validate_secret_key(db, credentials.credentials)
     if api_key is None:
         raise HTTPException(status_code=401, detail="Invalid API key")
     rc = request.app.state.redis

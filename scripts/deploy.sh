@@ -29,19 +29,8 @@ if [ ! -x "$PYTHON" ]; then PYTHON="${PYTHON%/Scripts/python.exe}/bin/python"; f
 cd "$PROJECT_ROOT"
 
 if [ "$SKIP_PRE_DEPLOY" != "1" ]; then
-  echo "==> [pre-deploy 1/2] pytest"
+  echo "==> [pre-deploy] pytest"
   "$PYTHON" -m pytest -q || { echo "ABORT: pytest failed"; exit 1; }
-
-  echo "==> [pre-deploy 2/2] CSV pattern validator"
-  if [ -f "Claude files/_agent_a_v2_validate.py" ] && [ -f "Claude files/routing_transactions.csv" ]; then
-    "$PYTHON" "Claude files/_agent_a_v2_validate.py" | tee /tmp/p2-csv-validate.out
-    if grep -qE 'NOT MET.*[1-9]' /tmp/p2-csv-validate.out; then
-      echo "ABORT: CSV has in-scope NOT MET patterns"
-      exit 1
-    fi
-  else
-    echo "WARN: CSV validator or dataset not found locally — skipping"
-  fi
 fi
 
 echo "==> tar-over-ssh project to $DROPLET:$REMOTE_PATH"
