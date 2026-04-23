@@ -31,7 +31,7 @@ decline_codes:
     weight: 3.0
   - code: "91"
     weight: 3.0
-  - code: "NW"
+  - code: "96"
     weight: 2.0
 
 supported_currencies:

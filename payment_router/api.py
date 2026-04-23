@@ -23,6 +23,10 @@ from payment_router.db import Session as DBSession, create_tables, engine, get_d
 from payment_router.engine import compare_providers, simulate_transaction, simulate_with_retry
 from payment_router.idempotency import get_cached, store as idem_store
 from payment_router.models import (
+    API_REQUEST_CARD_BRANDS,
+    API_REQUEST_CARD_TYPES,
+    CardBrand,
+    CardType,
     CompareRequest,
     CompareResult,
     ProviderResponse,
@@ -204,12 +208,53 @@ def get_provider(name: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# API-surface request wrappers
+#
+# Narrow the core SimulateRequest / CompareRequest to the brand/type
+# subsets the provider YAMLs actually model. Keeps JCB/Discover/UnionPay/
+# UNKNOWN available for internal pattern-rule BIN checks while rejecting
+# them at the HTTP boundary with a clear 422.
+# ---------------------------------------------------------------------------
+
+def _check_api_card_brand(v: CardBrand) -> CardBrand:
+    if v.value not in API_REQUEST_CARD_BRANDS:
+        raise ValueError(
+            f"card_brand '{v.value}' is not accepted by this endpoint. "
+            f"Supported: {sorted(API_REQUEST_CARD_BRANDS)}."
+        )
+    return v
+
+
+def _check_api_card_type(v: CardType) -> CardType:
+    if v.value not in API_REQUEST_CARD_TYPES:
+        raise ValueError(
+            f"card_type '{v.value}' is not accepted by this endpoint. "
+            f"Supported: {sorted(API_REQUEST_CARD_TYPES)}."
+        )
+    return v
+
+
+class ApiSimulateRequest(SimulateRequest):
+    """Public /simulate body. Rejects internal-only brands / types."""
+
+    _check_brand = field_validator("card_brand")(classmethod(lambda cls, v: _check_api_card_brand(v)))
+    _check_type = field_validator("card_type")(classmethod(lambda cls, v: _check_api_card_type(v)))
+
+
+class ApiCompareRequest(CompareRequest):
+    """Public /compare body. Rejects internal-only brands / types."""
+
+    _check_brand = field_validator("card_brand")(classmethod(lambda cls, v: _check_api_card_brand(v)))
+    _check_type = field_validator("card_type")(classmethod(lambda cls, v: _check_api_card_type(v)))
+
+
+# ---------------------------------------------------------------------------
 # Simulate — single transaction
 # ---------------------------------------------------------------------------
 
 @app.post("/simulate", response_model=ProviderResponse, tags=["simulation"])
 def simulate(
-    req: SimulateRequest,
+    req: ApiSimulateRequest,
     request: Request,
     db: Session = Depends(get_db),
     api_key=Depends(get_current_api_key),
@@ -252,7 +297,7 @@ def simulate(
 
 @app.post("/compare", response_model=list[CompareResult], tags=["simulation"])
 def compare(
-    req: CompareRequest,
+    req: ApiCompareRequest,
     api_key=Depends(get_current_api_key),
 ) -> list[CompareResult]:
     """Compare all providers for a transaction profile (runs 500 simulations per provider).
@@ -266,8 +311,8 @@ def compare(
 # Route — single transaction with soft-decline retry cascade
 # ---------------------------------------------------------------------------
 
-class RouteRequest(SimulateRequest):
-    """SimulateRequest extended with a priority-ordered provider list for retry."""
+class RouteRequest(ApiSimulateRequest):
+    """ApiSimulateRequest extended with a priority-ordered provider list for retry."""
     providers: list[str] = Field(..., min_length=1, max_length=10)
     max_attempts: int = Field(3, ge=1, le=10)
 
@@ -299,6 +344,10 @@ def route(
 # Query — natural-language-ready routing intelligence (used by chatbot)
 # ---------------------------------------------------------------------------
 
+_QUERY_BRANDS = frozenset({"visa", "mastercard", "amex"})
+_QUERY_TYPES = frozenset({"credit", "debit", "prepaid", "commercial"})
+
+
 class QueryRequest(BaseModel):
     country: str
     amount: float = Field(..., gt=0, le=10_000_000)
@@ -311,6 +360,26 @@ class QueryRequest(BaseModel):
     _country_upper = field_validator("country")(classmethod(lambda cls, v: normalize_country(v)))
     _issuer_country_upper = field_validator("issuer_country")(classmethod(lambda cls, v: normalize_optional_country(v)))
     _currency_upper = field_validator("currency")(classmethod(lambda cls, v: normalize_currency(v)))
+
+    @field_validator("card_brand")
+    @classmethod
+    def _validate_brand(cls, v: str) -> str:
+        v2 = str(v).lower().strip()
+        if v2 not in _QUERY_BRANDS:
+            raise ValueError(
+                f"card_brand '{v}' is not accepted. Supported: {sorted(_QUERY_BRANDS)}."
+            )
+        return v2
+
+    @field_validator("card_type")
+    @classmethod
+    def _validate_type(cls, v: str) -> str:
+        v2 = str(v).lower().strip()
+        if v2 not in _QUERY_TYPES:
+            raise ValueError(
+                f"card_type '{v}' is not accepted. Supported: {sorted(_QUERY_TYPES)}."
+            )
+        return v2
 
 
 @app.post("/query", tags=["simulation"])
@@ -332,7 +401,7 @@ def query(
 
 @app.post("/recommend", response_model=RouteRecommendation, tags=["simulation"])
 def recommend(
-    req: CompareRequest,
+    req: ApiCompareRequest,
     api_key=Depends(get_current_api_key),
 ) -> RouteRecommendation:
     """Recommend the best provider with plain-English reasoning."""

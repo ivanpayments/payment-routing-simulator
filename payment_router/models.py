@@ -15,6 +15,16 @@ from payment_router.validators import (
 
 _PROVIDER_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,63}$")
 
+# API-surface allowlists. Used by the wrapper request models in
+# api.py (ApiSimulateRequest, ApiCompareRequest, QueryRequest). The core
+# CardBrand / CardType enums below include UNKNOWN/DISCOVER/JCB/UNIONPAY
+# because the internal BIN-mismatch / pattern-rule layer needs to reason
+# about them. We restrict only at the API surface so callers cannot
+# request a brand/type no provider YAML actually models — that would fall
+# back silently to `base_approval_rate * 0.95` in engine._approval_probability.
+API_REQUEST_CARD_BRANDS = frozenset({"visa", "mastercard", "amex"})
+API_REQUEST_CARD_TYPES = frozenset({"credit", "debit", "prepaid", "commercial"})
+
 
 # ---------------------------------------------------------------------------
 # Enums
