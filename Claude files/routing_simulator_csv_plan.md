@@ -174,7 +174,7 @@ Ivan answers in his own words; gaps filled; code proceeds.
 1. `derive_profiles.py` emits 5 YAML profiles with visibly differentiated distributions.
 2. `prs simulate --archetype regional-bank-processor --country FR --card visa --amount 200` returns low approval + high latency (FR outside home region).
 3. `prs compare --country MX --card mastercard --amount 500` returns a ranked table where archetype fingerprints are visible to end users.
-4. Ivan can walk through the whole pipeline in <2 min on a screen-share: 6 discovery agents → 550 patterns → 250 selected → generator encodes → 150 applied + 600 non-contradictory → legal + Yuno cleared → 5 YAML profiles → simulator.
+4. Ivan can walk through the whole pipeline in <2 min on a screen-share: 6 discovery agents → 550 patterns → 250 selected → generator encodes → 150 applied + 600 non-contradictory → legal + senior-engineer review cleared → 5 YAML profiles → simulator.
 
 ## Deliberately out of scope
 
