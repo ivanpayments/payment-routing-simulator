@@ -62,7 +62,7 @@ countries:
   DE:
     base: 0.68
     card_modifiers:
-      amex: 0.88
+      amex: 0.96
       mastercard: 1.01
       visa: 1.02
     three_ds:
@@ -82,7 +82,7 @@ countries:
   AU:
     base: 0.68
     card_modifiers:
-      amex: 0.88
+      amex: 0.96
       mastercard: 1.06
       visa: 0.99
     three_ds:
@@ -122,7 +122,7 @@ countries:
   NL:
     base: 0.64
     card_modifiers:
-      amex: 0.82
+      amex: 0.96
       mastercard: 1.02
       visa: 1.04
     three_ds:
@@ -132,7 +132,7 @@ countries:
   BR:
     base: 0.57
     card_modifiers:
-      amex: 0.85
+      amex: 0.97
       mastercard: 1.00
       visa: 1.00
     three_ds:
@@ -142,7 +142,7 @@ countries:
   MX:
     base: 0.59
     card_modifiers:
-      amex: 0.88
+      amex: 0.97
       mastercard: 1.04
       visa: 1.00
     three_ds:
@@ -152,7 +152,7 @@ countries:
   IN:
     base: 0.55
     card_modifiers:
-      amex: 0.82
+      amex: 0.97
       mastercard: 0.98
       visa: 1.00
     three_ds:

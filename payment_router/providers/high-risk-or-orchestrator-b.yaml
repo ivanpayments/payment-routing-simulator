@@ -71,9 +71,11 @@ supported_currencies:
 amount_modifier_thresholds:
   # Orchestrator cascade can partially offset large-ticket friction but the
   # ticket-size sensitivity of the underlying processors still bleeds through.
+  # 2026-04-27 baseline lift: $1k tier eased from 0.92 to 0.95 (cascade
+  # benefit on $1k tickets is realistic given multi-PSP fallback).
   "0": 1.00
-  "500": 0.96
-  "1000": 0.92
+  "500": 0.98
+  "1000": 0.95
   "5000": 0.83
   "10000": 0.76
 
@@ -111,8 +113,7 @@ countries:
   DE:
     # Domestic DE still strong, but the cross-border lift must not exceed
     # cross-border-fx specialists (see /query corridor routing invariant).
-    # Lowered from 0.94 to 0.86.
-    base: 0.86
+    base: 0.89
     card_modifiers:
       amex: 0.96
       mastercard: 1.00
@@ -165,10 +166,12 @@ countries:
     # High-risk orchestrator semantics on domestic BR: orchestrator cascades
     # but without BR-issuer rails has no structural advantage over domestic
     # regional banks. Rate lowered from 0.93 to 0.78 so a BR-tuned regional
-    # bank wins domestic BR as archetype semantics imply.
-    base: 0.78
+    # bank wins domestic BR as archetype semantics imply. Held at 0.83 to
+    # stay >=5pp below regional-bank-processor-a BR (0.89).
+    base: 0.83
     card_modifiers:
-      amex: 0.88
+      # Per AD032 (Amex CNP -2pp): narrow Amex to ~3pp drag.
+      amex: 0.97
       mastercard: 1.00
       visa: 1.00
     three_ds:
@@ -176,9 +179,9 @@ countries:
       frictionless_rate: 0.68
       version_2_2_rate: 0.85
   MX:
-    base: 0.80
+    base: 0.86
     card_modifiers:
-      amex: 0.90
+      amex: 0.97
       mastercard: 1.00
       visa: 1.00
     three_ds:
@@ -186,7 +189,7 @@ countries:
       frictionless_rate: 0.74
       version_2_2_rate: 0.85
   IN:
-    base: 0.83
+    base: 0.86
     card_modifiers:
       amex: 0.98
       mastercard: 1.01

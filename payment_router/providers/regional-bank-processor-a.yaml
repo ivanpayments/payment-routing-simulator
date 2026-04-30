@@ -13,8 +13,10 @@ three_ds:
   version_2_2_rate: 0.55
 
 card_type_modifiers:
+  # Regional banks process strong issuer-side debit-rail volume; debit
+  # outperforms credit on domestic by ~3pp.
   credit: 1.00
-  debit: 0.97
+  debit: 1.03
   prepaid: 0.80
   commercial: 0.96
 
@@ -48,9 +50,12 @@ supported_currencies:
   - ARS
 
 amount_modifier_thresholds:
+  # 2026-04-27 baseline lift: $1k tier eased from 0.91 to 0.95 so the
+  # broad sweep median lands at the high end of the regional-specialist
+  # band (85-92% on home corridor, 80-88% cross-border).
   "0": 1.00
-  "500": 0.96
-  "1000": 0.91
+  "500": 0.98
+  "1000": 0.95
   "5000": 0.82
   "10000": 0.74
 
@@ -58,8 +63,8 @@ countries:
   BR:
     base: 0.89
     card_modifiers:
-      # BR-tuned regional bank: still sees Amex issuer-penetration gap.
-      amex: 0.88
+      # Per AD032 (Amex CNP -2pp): narrow Amex spread to ~3pp drag (was -12pp).
+      amex: 0.97
       mastercard: 1.02
       visa: 1.00
     three_ds:
@@ -68,7 +73,7 @@ countries:
   MX:
     base: 0.84
     card_modifiers:
-      amex: 0.88
+      amex: 0.97
       mastercard: 1.00
       visa: 1.00
     three_ds:
@@ -101,30 +106,54 @@ countries:
   AR:
     base: 0.72
     card_modifiers:
-      amex: 0.90
+      amex: 0.97
       mastercard: 1.09
       visa: 0.93
     three_ds:
       challenge_rate: 0.55
       frictionless_rate: 0.45
+  # Cross-corridor entries (2026-04-27 baseline lift): a LATAM-specialist
+  # bank running cards from non-home merchants still routes through standard
+  # rails — calibrated 0.86-0.88 (home corridor minus 2-4pp), not the
+  # 0.62-0.68 that effectively modeled "no support" rather than "weaker fit".
   US:
-    base: 0.62
+    base: 0.87
     card_modifiers:
       amex: 0.95
       mastercard: 1.00
       visa: 1.00
   GB:
-    base: 0.65
+    base: 0.87
     card_modifiers:
       mastercard: 1.00
       visa: 1.00
   DE:
-    base: 0.63
+    base: 0.86
     card_modifiers:
       mastercard: 0.99
       visa: 1.00
+  FR:
+    base: 0.86
+    card_modifiers:
+      mastercard: 1.00
+      visa: 1.00
+  AU:
+    base: 0.86
+    card_modifiers:
+      mastercard: 0.99
+      visa: 1.00
+  IN:
+    base: 0.86
+    card_modifiers:
+      mastercard: 1.01
+      visa: 0.98
+  JP:
+    base: 0.86
+    card_modifiers:
+      mastercard: 1.01
+      visa: 0.99
   AE:
-    base: 0.68
+    base: 0.85
     card_modifiers:
       amex: 1.02
       mastercard: 1.00

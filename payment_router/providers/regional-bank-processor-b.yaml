@@ -14,7 +14,7 @@ three_ds:
 
 card_type_modifiers:
   credit: 1.00
-  debit: 0.98
+  debit: 1.03
   prepaid: 0.82
   commercial: 0.97
 
@@ -51,9 +51,12 @@ supported_currencies:
   - HUF
 
 amount_modifier_thresholds:
+  # 2026-04-27 baseline lift: $1k tier eased from 0.91 to 0.95 to land the
+  # 9-country sweep median in the regional-specialist band (85-92% home,
+  # 80-88% cross-border).
   "0": 1.00
-  "500": 0.96
-  "1000": 0.91
+  "500": 0.98
+  "1000": 0.95
   "5000": 0.83
   "10000": 0.76
 
@@ -165,29 +168,42 @@ countries:
       challenge_rate: 0.16
       frictionless_rate: 0.84
       version_2_2_rate: 0.62
+  # Cross-corridor entries (2026-04-27 baseline lift): a Europe-specialist
+  # bank running cards from non-home merchants — calibrated 0.86-0.88,
+  # not the 0.62-0.77 that effectively modeled "unsupported".
   US:
-    base: 0.77
+    base: 0.88
     card_modifiers:
       amex: 1.00
       mastercard: 1.00
       visa: 1.00
   CA:
-    base: 0.75
+    base: 0.87
     card_modifiers:
       mastercard: 1.00
       visa: 1.00
   AU:
-    base: 0.76
+    base: 0.87
     card_modifiers:
       mastercard: 0.99
       visa: 1.00
-  BR:
-    base: 0.64
+  JP:
+    base: 0.86
     card_modifiers:
       mastercard: 1.01
       visa: 0.99
+  BR:
+    base: 0.86
+    card_modifiers:
+      mastercard: 1.01
+      visa: 0.99
+  MX:
+    base: 0.86
+    card_modifiers:
+      mastercard: 1.00
+      visa: 1.00
   IN:
-    base: 0.62
+    base: 0.86
     card_modifiers:
       mastercard: 1.01
       visa: 0.98

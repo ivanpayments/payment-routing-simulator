@@ -100,6 +100,7 @@ def test_domestic_transaction_no_penalty():
     )
 
 
+@pytest.mark.skip(reason="audit v4 M1 (2026-04-27) tightened normalize_optional_country to the 31-country provider allowlist; tier-3 issuers (NG, PK, …) are no longer accepted at the model surface. The engine-side issuer_modifier() still applies the tier-3 multiplier; covered by direct unit tests on issuer_tiers.py.")
 def test_tier3_issuer_lower_approval():
     """Tier 3 issuer (NG) on US merchant should have lower approval than domestic."""
     n = 300
@@ -167,6 +168,7 @@ def test_compare_providers_sorted():
     assert rates == sorted(rates, reverse=True)
 
 
+@pytest.mark.skip(reason="audit v4 M1 (2026-04-27) tightened normalize_optional_country to the 31-country provider allowlist; tier-3 issuers (NG, …) no longer accepted at the model surface.")
 def test_compare_with_issuer_country():
     """Compare should accept issuer_country and apply it consistently."""
     req = CompareRequest(country="US", issuer_country="NG", card_brand=CardBrand.VISA, amount=100.0)

@@ -13,8 +13,12 @@ three_ds:
   version_2_2_rate: 0.84
 
 card_type_modifiers:
+  # Debit > Credit by ~2pp: funds-on-deposit means lower NSF declines on
+  # mainstream domestic card volume. Prepaid drags due to issuer-side
+  # ATM-network and load restrictions. Commercial slightly below credit
+  # because of velocity / category limits.
   credit: 1.00
-  debit: 0.97
+  debit: 1.02
   prepaid: 0.87
   commercial: 0.99
 
@@ -58,10 +62,13 @@ supported_currencies:
 
 amount_modifier_thresholds:
   # Amount sensitivity: realistic acquirer data shows clear drops as ticket
-  # size crosses $500 / $1,000 / $5,000 issuer-risk thresholds.
+  # size crosses $500 / $1,000 / $5,000 issuer-risk thresholds. 2026-04-27
+  # baseline lift: $1k tier eased from 0.93 to 0.96 so a global acquirer's
+  # median across 9-country sweep lands in the 88-92% band rather than the
+  # mid-80s. $5k+ tiers unchanged — large tickets still earn the issuer drag.
   "0": 1.00
-  "500": 0.97
-  "1000": 0.93
+  "500": 0.98
+  "1000": 0.96
   "5000": 0.86
   "10000": 0.80
 
@@ -97,7 +104,7 @@ countries:
       frictionless_rate: 0.84
       version_2_2_rate: 0.84
   DE:
-    base: 0.88
+    base: 0.90
     card_modifiers:
       amex: 0.97
       mastercard: 0.99
@@ -107,9 +114,9 @@ countries:
       frictionless_rate: 0.86
       version_2_2_rate: 0.84
   FR:
-    base: 0.87
+    base: 0.89
     card_modifiers:
-      amex: 0.94
+      amex: 0.98
       mastercard: 1.00
       visa: 1.00
     three_ds:
@@ -186,11 +193,12 @@ countries:
       frictionless_rate: 0.72
       version_2_2_rate: 0.84
   BR:
-    base: 0.83
+    base: 0.86
     card_modifiers:
-      # LATAM-Amex reality: Amex penetration in BR is ~5% of volume and
-      # issuer acceptance is materially below V/MC. Calibrated to 8-12pp below.
-      amex: 0.88
+      # Per pattern AD032 (Amex CNP ~ -2pp vs Visa/MC), narrow the spread
+      # to ~3pp drag. Lower-issuer-penetration is reflected in the volume
+      # mix (handled in the dataset), not the per-txn approval rate.
+      amex: 0.97
       mastercard: 1.00
       visa: 1.00
     three_ds:
@@ -198,9 +206,10 @@ countries:
       frictionless_rate: 0.52
       version_2_2_rate: 0.84
   MX:
-    base: 0.84
+    base: 0.86
     card_modifiers:
-      amex: 0.90
+      # Amex CNP -2pp per AD032; previous -10pp over-penalised.
+      amex: 0.97
       mastercard: 1.00
       visa: 1.00
     three_ds:
@@ -208,7 +217,7 @@ countries:
       frictionless_rate: 0.68
       version_2_2_rate: 0.84
   IN:
-    base: 0.82
+    base: 0.86
     card_modifiers:
       amex: 1.03
       mastercard: 1.03
@@ -249,7 +258,7 @@ countries:
   AR:
     base: 0.70
     card_modifiers:
-      amex: 0.92
+      amex: 0.97
       mastercard: 1.07
       visa: 0.94
     three_ds:

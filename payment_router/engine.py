@@ -2,13 +2,58 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import random
 import uuid
 from collections import Counter
+from contextlib import contextmanager
 from math import log
 
 import numpy as np
+
+
+def _compare_seed(req) -> int:
+    """Stable 64-bit seed derived from the request fields that affect ranking.
+
+    Same inputs → same seed → same Monte Carlo draws → identical /compare,
+    /recommend, /query rankings across calls. Excludes idempotency_key,
+    provider, and any identifier that should not influence the ranking.
+
+    `mcc` is included so that adding/removing the MCC field changes the seed
+    deterministically (otherwise an MCC-bucket lift would not be reproducible
+    across calls when callers vary the MCC).
+    """
+    parts = [
+        str(req.country or "").upper(),
+        str(req.issuer_country or "").upper(),
+        str(req.card_brand.value if hasattr(req.card_brand, "value") else req.card_brand).lower(),
+        str(req.card_type.value if hasattr(req.card_type, "value") else req.card_type).lower(),
+        f"{float(req.amount):.4f}",
+        str(req.currency or "").upper(),
+        "1" if getattr(req, "use_3ds", False) else "0",
+        str(getattr(req, "mcc", None) or "").strip(),
+    ]
+    digest = hashlib.blake2b("|".join(parts).encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, "big", signed=False)
+
+
+@contextmanager
+def _seeded_rng(seed: int):
+    """Pin random.* and numpy.random.* to a deterministic seed for the
+    duration of the block, restoring the prior global state on exit so
+    the rest of the process keeps its non-deterministic behaviour
+    (single /simulate, retry cascade, webhook IDs, etc.).
+    """
+    py_state = random.getstate()
+    np_state = np.random.get_state()
+    try:
+        random.seed(seed)
+        np.random.seed(seed & 0xFFFFFFFF)
+        yield
+    finally:
+        random.setstate(py_state)
+        np.random.set_state(np_state)
 
 from payment_router.models import (
     CardBrand,
@@ -57,6 +102,110 @@ _CROSS_BORDER_FIT_LIFT: dict[str, float] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# MCC bucketing (v1)
+# Without this, the high-risk specialist orchestrator-a ranks dead last on
+# every textbook profile because the simulator never receives an MCC signal.
+# v1 = static high-risk allowlist + numeric mainstream demote. Replace with
+# per-MCC YAML lookups when the YAMLs ship richer mcc tables.
+# ---------------------------------------------------------------------------
+
+# MCCs traditionally classified as high-risk by acquirers / scheme rules.
+# Source: Visa Acquirer Risk MCC list (5944 jewelry, 5967 direct-mail/inbound
+# telemarketing, 7273 dating, 7995 gambling, 5816 digital goods/games,
+# 5993 cigar stores, 5912 drug stores, 4816 computer network info svcs).
+_HIGH_RISK_MCCS: frozenset[str] = frozenset({
+    "5944",  # Jewelry
+    "5967",  # Direct marketing — inbound teleservices / adult content
+    "7273",  # Dating services
+    "7995",  # Gambling
+    "5816",  # Digital goods — large game/digital downloads
+    "5993",  # Cigar stores
+    "4816",  # Computer network information services
+})
+
+# MCCs that flag specialised regulatory verticals — orchestrator-a is built
+# for these, so we lift it. Mainstream MCCs (grocery, restaurant, electronics
+# etc.) get the inverse treatment so the high-risk specialist does not
+# dominate vanilla flows.
+#
+# 2026-04-27 audit fix:
+#   • orchestrator-b was getting +4pp on high-risk MCCs, which is wrong.
+#     orchestrator-b is the multi-PSP general-purpose routing brand; in
+#     production it would either decline high-risk merchants outright or
+#     route them to its high-risk-vertical sister. It does NOT get a lift
+#     just for being an "orchestrator" — only the dedicated high-risk
+#     specialist (orchestrator-a) does.
+#   • Set orchestrator-b high-risk lift to -0.05 (small drag, mirrors
+#     mainstream archetypes which all lose ~10pp on high-risk MCCs).
+_MCC_BUCKET_LIFT: dict[str, dict[str, float]] = {
+    # bucket -> {provider_name: lift_pp_as_decimal}
+    "high_risk": {
+        "high-risk-or-orchestrator-a": 0.18,
+        # orchestrator-b is general-purpose multi-PSP routing — small drag
+        # on high-risk MCCs, NOT a lift (was +0.04 → now -0.05).
+        "high-risk-or-orchestrator-b": -0.05,
+        # Mainstream archetypes lose ~10pp on high-risk MCCs because they
+        # would decline these merchants outright in production.
+        "global-acquirer-a": -0.10,
+        "global-acquirer-b": -0.10,
+        "regional-bank-processor-a": -0.12,
+        "regional-bank-processor-b": -0.12,
+        "regional-bank-processor-c": -0.12,
+        "regional-card-specialist-a": -0.06,
+        "regional-card-specialist-b": -0.06,
+        "cross-border-fx-specialist-a": -0.04,
+        "cross-border-fx-specialist-b": -0.04,
+    },
+    "mainstream": {
+        # Slight demote for high-risk specialists when MCC is plainly low-risk.
+        "high-risk-or-orchestrator-a": -0.05,
+        # orchestrator-b is "multi-PSP routing" archetype; it is general
+        # purpose, so do not penalise it here.
+    },
+}
+
+
+# 3DS approval lift (additive, applied in _approval_probability when use_3ds=True).
+# Pattern basis: 3DS authentication carries a liability shift to the issuer,
+# which tightens issuer risk thresholds and increases approval likelihood by
+# 1–4pp on CNP card volume (industry consensus, e.g. Visa Risk Manager studies,
+# Stripe Radar baselines). The lift is smaller for already-high-3DS regions
+# (EEA mandatory) and larger for opt-in regions (US/CA/AU). Engine applies
+# a flat +0.02 baseline lift here; the 3DS challenge probability and
+# liability_shift fields downstream do not affect approval re-draw.
+_3DS_APPROVAL_LIFT: float = 0.02
+
+
+def _classify_mcc(mcc: str | None) -> str | None:
+    """Return 'high_risk', 'mainstream', or None if MCC is missing/unknown.
+
+    None preserves backwards-compatible behaviour for callers that omit MCC
+    (legacy clients, the chatbot tool calls that don't pass MCC yet).
+    """
+    if not mcc:
+        return None
+    raw = str(mcc).strip()
+    if not raw:
+        return None
+    if raw in _HIGH_RISK_MCCS:
+        return "high_risk"
+    # Anything that parses as a 4-digit numeric MCC and isn't in the high-risk
+    # set we treat as mainstream. Non-numeric / wrong length → unknown (None)
+    # so we don't apply a lift on garbage input.
+    if len(raw) == 4 and raw.isdigit():
+        return "mainstream"
+    return None
+
+
+def _mcc_lift(provider_name: str, mcc: str | None) -> float:
+    """Per-provider lift (additive on the multiplicative base) from MCC bucket."""
+    bucket = _classify_mcc(mcc)
+    if bucket is None:
+        return 0.0
+    return _MCC_BUCKET_LIFT.get(bucket, {}).get(provider_name, 0.0)
+
+
 def _approval_probability(provider_name: str, req: SimulateRequest) -> float:
     profile = load_provider(provider_name)
     cp = profile.country(req.country)
@@ -101,7 +250,20 @@ def _approval_probability(provider_name: str, req: SimulateRequest) -> float:
         if req.amount >= threshold:
             amount_mod = modifier
 
-    return min(base * amount_mod, 0.99)
+    # MCC bucket lift (v1) — additive on top of the multiplicative base, then
+    # clamped to [0, 0.99]. No-op when req.mcc is None / unrecognised.
+    mcc_lift = _mcc_lift(provider_name, getattr(req, "mcc", None))
+
+    # 3DS approval lift — additive, applied when caller requests 3DS.
+    # Pattern basis: liability shift to issuer tightens fraud thresholds and
+    # raises approval probability ~2pp on CNP card volume. Without this lift
+    # the engine treats 3DS as approval-neutral, which contradicts industry
+    # data (Visa Risk Manager, Stripe Radar) and the AD003 EU baseline that
+    # bakes 3DS friction into a 82-85% blended rate (i.e. lifts compensate
+    # for SCA challenges). Patch 2026-04-27.
+    threeds_lift = _3DS_APPROVAL_LIFT if getattr(req, "use_3ds", False) else 0.0
+
+    return max(0.0, min(base * amount_mod + mcc_lift + threeds_lift, 0.99))
 
 
 # ---------------------------------------------------------------------------
@@ -423,62 +585,77 @@ def simulate_with_retry(
 # ---------------------------------------------------------------------------
 
 def compare_providers(req: CompareRequest) -> list[CompareResult]:
+    """Rank all providers via Monte Carlo for the given transaction profile.
+
+    Determinism: the Monte Carlo draws are seeded from a stable hash of the
+    request fields that affect ranking (country, issuer_country, card_brand,
+    card_type, amount, currency, use_3ds). Same input → same ranking, every
+    call. /compare, /recommend, and /query (which all funnel through this
+    function) therefore agree bit-for-bit on identical inputs. The seeding
+    is scoped to this function — single /simulate calls, retry cascades,
+    webhooks, UUIDs etc. retain their normal non-deterministic behaviour.
+    """
     N = 500
     results = []
 
-    for provider_name in list_providers():
-        sim_req = SimulateRequest(
-            provider=provider_name,
-            country=req.country,
-            issuer_country=req.issuer_country,
-            card_brand=req.card_brand,
-            card_type=req.card_type,
-            amount=req.amount,
-            currency=req.currency,
-            use_3ds=req.use_3ds,
-        )
+    with _seeded_rng(_compare_seed(req)):
+        for provider_name in list_providers():
+            sim_req = SimulateRequest(
+                provider=provider_name,
+                country=req.country,
+                issuer_country=req.issuer_country,
+                card_brand=req.card_brand,
+                card_type=req.card_type,
+                amount=req.amount,
+                currency=req.currency,
+                use_3ds=req.use_3ds,
+                mcc=getattr(req, "mcc", None),
+            )
 
-        approved_count = 0
-        latencies: list[float] = []
-        decline_codes: Counter = Counter()
-        declined_total = 0
-        challenged_count = 0
+            approved_count = 0
+            latencies: list[float] = []
+            decline_codes: Counter = Counter()
+            declined_total = 0
+            challenged_count = 0
 
-        for _ in range(N):
-            r = simulate_transaction(sim_req)
-            latencies.append(r.latency_ms)
-            if r.approved:
-                approved_count += 1
+            for _ in range(N):
+                r = simulate_transaction(sim_req)
+                latencies.append(r.latency_ms)
+                if r.approved:
+                    approved_count += 1
+                else:
+                    declined_total += 1
+                    decline_codes[r.response_code] += 1
+                if req.use_3ds and r.three_ds and r.three_ds.challenged:
+                    challenged_count += 1
+
+            latencies.sort()
+            p50 = latencies[int(N * 0.50)]
+            p95 = latencies[int(N * 0.95)]
+
+            code_dist: dict[str, float] = (
+                {code: count / declined_total for code, count in decline_codes.most_common(5)}
+                if declined_total
+                else {}
+            )
+            # Populate three_ds_challenge_rate from the empirical sample when use_3ds
+            # was requested; otherwise fall back to the YAML-declared challenge rate
+            # for this corridor so the field is never null.
+            if req.use_3ds:
+                challenge_rate = challenged_count / N
             else:
-                declined_total += 1
-                decline_codes[r.response_code] += 1
-            if req.use_3ds and r.three_ds and r.three_ds.challenged:
-                challenged_count += 1
+                challenge_rate = load_provider(provider_name).effective_three_ds(req.country).challenge_rate
 
-        latencies.sort()
-        p50 = latencies[int(N * 0.50)]
-        p95 = latencies[int(N * 0.95)]
+            results.append(CompareResult(
+                provider=provider_name,
+                projected_approval_rate=approved_count / N,
+                latency_p50_ms=p50,
+                latency_p95_ms=p95,
+                decline_code_distribution=code_dist,
+                three_ds_challenge_rate=challenge_rate,
+            ))
 
-        code_dist: dict[str, float] = (
-            {code: count / declined_total for code, count in decline_codes.most_common(5)}
-            if declined_total
-            else {}
-        )
-        # Populate three_ds_challenge_rate from the empirical sample when use_3ds
-        # was requested; otherwise fall back to the YAML-declared challenge rate
-        # for this corridor so the field is never null.
-        if req.use_3ds:
-            challenge_rate = challenged_count / N
-        else:
-            challenge_rate = load_provider(provider_name).effective_three_ds(req.country).challenge_rate
-
-        results.append(CompareResult(
-            provider=provider_name,
-            projected_approval_rate=approved_count / N,
-            latency_p50_ms=p50,
-            latency_p95_ms=p95,
-            decline_code_distribution=code_dist,
-            three_ds_challenge_rate=challenge_rate,
-        ))
-
-    return sorted(results, key=lambda r: r.projected_approval_rate, reverse=True)
+    # Deterministic sort: primary key = projected_approval_rate desc,
+    # secondary key = provider name asc. This guarantees that even if two
+    # providers tie on the seeded sample, the order is stable across calls.
+    return sorted(results, key=lambda r: (-r.projected_approval_rate, r.provider))

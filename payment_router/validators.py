@@ -79,10 +79,19 @@ def normalize_country(value: str) -> str:
 
 
 def normalize_optional_country(value: Optional[str]) -> Optional[str]:
-    """Issuer country. Must be well-formed ISO alpha-2 but NOT required to be in
-    the provider allowlist — a merchant can legitimately accept a card issued in
-    a country no provider has modelled. The engine handles unknown issuers via
-    a default cross-border penalty.
+    """Issuer country. Must be well-formed ISO alpha-2 AND in the provider
+    allowlist (audit v4 M1, 2026-04-27).
+
+    Rationale: the previous policy accepted any well-formed ISO alpha-2 on
+    the theory that the engine would apply a default cross-border penalty.
+    In practice that meant garbage inputs like ``ZZ`` or typo'd codes (``UA``
+    when ``UK`` was intended) returned a confident 200 with provider
+    rankings — the same silent-fallback failure mode that motivated the
+    merchant-country allowlist. Aligning the two validators removes the
+    asymmetry: every ISO/allowlist field is now strict at the API surface.
+
+    The 31-country allowlist is the union of ``countries:`` keys across
+    every provider YAML — same source of truth as ``normalize_country``.
     """
     if value is None:
         return value
@@ -90,6 +99,12 @@ def normalize_optional_country(value: Optional[str]) -> Optional[str]:
     if not COUNTRY_RE.match(v):
         raise ValueError(
             "issuer_country must be ISO 3166-1 alpha-2 (two uppercase letters, e.g. US)"
+        )
+    allowed = supported_countries()
+    if allowed and v not in allowed:
+        raise ValueError(
+            f"issuer_country '{v}' is not modelled by any provider. "
+            f"Supported: {', '.join(sorted(allowed))}."
         )
     return v
 

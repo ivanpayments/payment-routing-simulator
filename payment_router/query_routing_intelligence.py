@@ -22,6 +22,7 @@ def query_routing_intelligence(
     card_type: str = "credit",
     issuer_country: str | None = None,
     use_3ds: bool = False,
+    mcc: str | None = None,
 ) -> dict:
     """Return routing recommendations for a given transaction profile.
 
@@ -34,6 +35,9 @@ def query_routing_intelligence(
     card_type:      "credit", "debit", "prepaid", or "commercial" (default "credit")
     issuer_country: Card-issuing country, if known (omit = assume domestic)
     use_3ds:        Whether to include 3DS challenge rate in the analysis
+    mcc:            Optional 4-digit MCC. High-risk MCCs (5944/5967/7273/7995/...)
+                    boost specialised orchestrators; mainstream MCCs slightly
+                    demote them.
 
     Returns
     -------
@@ -41,10 +45,16 @@ def query_routing_intelligence(
         recommended_provider    str   — top-ranked provider name
         fallback_provider       str   — second-best for retry cascade
         retry_order             list  — all providers in recommended routing order
-        rankings                list  — [{provider, approval_rate, latency_p50_ms, ...}]
+        rankings                list  — [{provider, projected_approval_rate, latency_p50_ms, ...}]
         reasoning               str   — plain-English explanation of the recommendation
         key_insight             str   — one notable finding (cross-border penalty, 3DS etc.)
         scenario                dict  — echo of the input parameters
+
+    Field naming aligned with /compare and /recommend response shapes —
+    `projected_approval_rate` is now the canonical key everywhere a Monte
+    Carlo projection is returned (audit v3 R3, 2026-04-26). Previously
+    /query exposed the same metric under `approval_rate`, which forced
+    client developers to remap one of the three endpoints by hand.
     """
     # Normalise inputs
     country = country.upper()
@@ -69,22 +79,35 @@ def query_routing_intelligence(
         amount=amount,
         currency=currency,
         use_3ds=use_3ds,
+        mcc=mcc,
     )
 
     rankings_raw = compare_providers(req)
 
-    # Filter "00" (approval code) out of top_decline_codes — it should
-    # only contain actual declines. A merchant inspecting the top decline
-    # codes must not see the approval code in the list.
+    # Cross-endpoint shape parity (audit v4 M2 + M3, 2026-04-27).
+    #
+    # Previously /query exposed `latency_p50_ms` as an int (rounded) and
+    # the decline data as `top_decline_codes: [["05", 0.42], ...]` — a
+    # different field name and a different shape than /compare and
+    # /recommend, which return floats and `decline_code_distribution`
+    # as a dict. Same metrics, two response shapes, two field names.
+    #
+    # Fix: emit floats everywhere and use `decline_code_distribution`
+    # (dict) as the canonical key for the decline distribution. The
+    # "00" filter (approval code must not show up in a "decline"
+    # field) still applies. We round to keep the chatbot's payload
+    # human-readable without forcing the type drift back in.
     rankings = [
         {
             "provider": r.provider,
-            "approval_rate": round(r.projected_approval_rate, 3),
-            "latency_p50_ms": round(r.latency_p50_ms),
-            "latency_p95_ms": round(r.latency_p95_ms),
-            "top_decline_codes": [
-                code for code in r.decline_code_distribution.keys() if code != "00"
-            ][:3],
+            "projected_approval_rate": round(r.projected_approval_rate, 3),
+            "latency_p50_ms": round(float(r.latency_p50_ms), 1),
+            "latency_p95_ms": round(float(r.latency_p95_ms), 1),
+            "decline_code_distribution": {
+                code: round(share, 3)
+                for code, share in r.decline_code_distribution.items()
+                if code != "00"
+            },
             **({"three_ds_challenge_rate": round(r.three_ds_challenge_rate, 3)}
                if r.three_ds_challenge_rate is not None else {}),
         }
@@ -119,19 +142,37 @@ def query_routing_intelligence(
         )
 
     if second:
-        gap = best["approval_rate"] - second["approval_rate"]
-        reasoning = (
-            f"{best['provider']} is the best choice for {card_type} {card_brand} "
-            f"transactions in {country} at {amount} {currency}, projecting "
-            f"{best['approval_rate']:.1%} approval at {best['latency_p50_ms']}ms p50. "
-            f"It leads {second['provider']} by {gap:.1%} ({second['approval_rate']:.1%}). "
-            f"For a retry cascade on soft declines, route to {second['provider']} next."
-            f"{cross_border_note}"
-        )
+        gap = best["projected_approval_rate"] - second["projected_approval_rate"]
+        gap_pp = gap * 100  # in percentage points
+        # Spread-adaptive language (audit v2 N4, 2026-04-26): below 1pp the
+        # spread is within Monte Carlo noise (n=500), so don't say "leads by"
+        # — call it a tie and tell buyers to break by latency / fees.
+        if gap_pp < 1.0:
+            reasoning = (
+                f"{best['provider']} ({best['projected_approval_rate']:.1%}) and "
+                f"{second['provider']} ({second['projected_approval_rate']:.1%}) tie on "
+                f"approval for {card_type} {card_brand} in {country} at "
+                f"{amount} {currency} — spread is {gap_pp:.2f}pp, within "
+                f"Monte Carlo noise (n=500). Pick by latency "
+                f"(p50 {best['latency_p50_ms']:.0f}ms vs "
+                f"{second['latency_p50_ms']:.0f}ms) or fees. "
+                f"For a retry cascade on soft declines, "
+                f"{second['provider']} is a sensible fallback."
+                f"{cross_border_note}"
+            )
+        else:
+            reasoning = (
+                f"{best['provider']} is the best choice for {card_type} {card_brand} "
+                f"transactions in {country} at {amount} {currency}, projecting "
+                f"{best['projected_approval_rate']:.1%} approval at {best['latency_p50_ms']:.0f}ms p50. "
+                f"It leads {second['provider']} by {gap:.1%} ({second['projected_approval_rate']:.1%}). "
+                f"For a retry cascade on soft declines, route to {second['provider']} next."
+                f"{cross_border_note}"
+            )
     else:
         reasoning = (
             f"{best['provider']} is the only available provider, projecting "
-            f"{best['approval_rate']:.1%} approval.{cross_border_note}"
+            f"{best['projected_approval_rate']:.1%} approval.{cross_border_note}"
         )
 
     # Build key insight
@@ -152,6 +193,7 @@ def query_routing_intelligence(
             "amount": amount,
             "currency": currency,
             "use_3ds": use_3ds,
+            "mcc": mcc,
         },
     }
 
@@ -163,19 +205,73 @@ def _derive_insight(
     card_type: CardType,
     use_3ds: bool,
 ) -> str:
-    """Generate one notable observation about this routing scenario."""
+    """Generate one notable observation about this routing scenario.
+
+    The headline insight compares the recommended provider against the
+    realistic runner-up (the fallback) — NOT against the worst-of-N.
+    Comparing top-1 to worst-of-N produces rhetorically misleading spreads
+    (e.g. "37.8% lift") because the worst provider is often a structural
+    misfit no merchant would route to. The runner-up is the realistic
+    alternative a buyer would weigh.
+
+    Wording adapts to spread magnitude (audit v3 R8, 2026-04-26):
+      * spread < 0.5pp → "tied within Monte Carlo noise" — the previous
+                         "edges by 0.0/0.2/0.4pp" template was meaningless
+                         (n=500 standard error ≈ 1pp), so flag the tie
+                         explicitly and tell buyers to pick on latency/fees.
+      * 0.5pp ≤ spread < 2pp  → "edges by Xpp" — small but distinguishable
+      * 2pp ≤ spread < 5pp    → "leads by Xpp" — meaningful gap
+      * spread ≥ 5pp          → "clearly outperforms" — decisive
+    """
 
     best = rankings[0]
-    worst = rankings[-1]
-    spread = best["approval_rate"] - worst["approval_rate"]
+    second = rankings[1] if len(rankings) > 1 else None
 
-    # Large spread between best and worst — routing choice matters a lot
-    if spread >= 0.20:
-        return (
-            f"Provider choice is high-impact here: {best['provider']} ({best['approval_rate']:.1%}) "
-            f"outperforms {worst['provider']} ({worst['approval_rate']:.1%}) by {spread:.1%} — "
-            f"routing to the wrong provider loses roughly 1 in {int(1/spread + 0.5)} transactions."
-        )
+    # Headline: best vs realistic runner-up (the fallback returned to caller).
+    # Only emit if there IS a runner-up; degenerate single-provider case
+    # falls through to the secondary-insight branches below.
+    if second is not None:
+        gap = best["projected_approval_rate"] - second["projected_approval_rate"]
+        gap_pp = gap * 100  # in percentage points
+        # Scale anchor: incremental approvals per 1M txns at the given gap.
+        # Round to nearest hundred so the number reads as an estimate, not a forecast.
+        incremental_per_1m = int(round(gap * 1_000_000, -2))
+
+        if gap_pp < 0.5:
+            # Within Monte Carlo noise (n=500 SE ≈ 1pp) — call it a tie.
+            return (
+                f"{best['provider']} ({best['projected_approval_rate']:.1%}) and "
+                f"{second['provider']} ({second['projected_approval_rate']:.1%}) "
+                f"are tied within Monte Carlo noise (spread {gap_pp:.2f}pp, "
+                f"n=500 standard error ≈ 1pp) — pick by latency/fees, "
+                f"not approval."
+            )
+        elif gap_pp < 2.0:
+            # Small but distinguishable spread — be honest. Don't oversell.
+            return (
+                f"{best['provider']} ({best['projected_approval_rate']:.1%}) edges the next-best "
+                f"realistic option {second['provider']} ({second['projected_approval_rate']:.1%}) "
+                f"by {gap_pp:.1f}pp — small absolute spread, "
+                f"but on 1M txns that's ~{incremental_per_1m:,} incremental approvals."
+            )
+        elif gap_pp < 5.0:
+            return (
+                f"{best['provider']} ({best['projected_approval_rate']:.1%}) leads the next-best "
+                f"realistic option {second['provider']} ({second['projected_approval_rate']:.1%}) "
+                f"by {gap_pp:.1f}pp — a meaningful but not decisive gap; "
+                f"on 1M txns that's ~{incremental_per_1m:,} incremental approvals."
+            )
+        else:
+            return (
+                f"{best['provider']} ({best['projected_approval_rate']:.1%}) clearly outperforms "
+                f"the next-best realistic option {second['provider']} "
+                f"({second['projected_approval_rate']:.1%}) by {gap_pp:.1f}pp — "
+                f"on 1M txns that's ~{incremental_per_1m:,} incremental approvals; "
+                f"the routing call is decisive."
+            )
+
+    # ---- Secondary insights (only reachable when there is no runner-up,
+    # which in practice never happens with 11 providers — kept defensively) ----
 
     # Cross-border issuer penalty
     if issuer_country and issuer_country != country:
@@ -199,37 +295,8 @@ def _derive_insight(
             f"which has the highest prepaid tolerance in this market."
         )
 
-    # High 3DS challenge rate
-    if use_3ds:
-        challenge_rates = [
-            (r["provider"], r["three_ds_challenge_rate"])
-            for r in rankings
-            if "three_ds_challenge_rate" in r
-        ]
-        if challenge_rates:
-            lowest = min(challenge_rates, key=lambda x: x[1])
-            highest = max(challenge_rates, key=lambda x: x[1])
-            if highest[1] - lowest[1] >= 0.15:
-                return (
-                    f"3DS challenge rates vary significantly: {lowest[0]} challenges "
-                    f"{lowest[1]:.0%} of transactions vs {highest[0]} at {highest[1]:.0%}. "
-                    f"Lower challenge rate reduces checkout abandonment."
-                )
-
-    # Latency spread
-    latencies = [(r["provider"], r["latency_p50_ms"]) for r in rankings]
-    fastest = min(latencies, key=lambda x: x[1])
-    slowest = max(latencies, key=lambda x: x[1])
-    if slowest[1] / fastest[1] >= 2.0:
-        return (
-            f"Latency spread is wide: {fastest[0]} at {fastest[1]}ms p50 vs "
-            f"{slowest[0]} at {slowest[1]}ms p50. "
-            f"For latency-sensitive flows, {fastest[0]} is the clear choice."
-        )
-
-    # Default
+    # Default fallback (single-provider case)
     return (
-        f"Provider spread is narrow ({spread:.1%}). "
-        f"In this market, approval rate differences are small — "
-        f"latency and cost should drive the final routing decision."
+        f"{best['provider']} is the only available provider for this profile, "
+        f"so there is no comparison to draw — projection: {best['projected_approval_rate']:.1%} approval."
     )

@@ -25,6 +25,82 @@ _PROVIDER_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,63}$")
 API_REQUEST_CARD_BRANDS = frozenset({"visa", "mastercard", "amex"})
 API_REQUEST_CARD_TYPES = frozenset({"credit", "debit", "prepaid", "commercial"})
 
+# API-surface MCC allowlist. Mirrors the 11-entry MCC dropdown in the
+# Routing Simulator UI (routing-simulator/content.json::per_txn_simulator.mccs).
+# Without this, a typo'd MCC ("abcd", "9999") silently falls through to the
+# no-MCC code path and returns plausible-looking rankings — see audit v2 N1
+# (2026-04-26). Engine-side _classify_mcc still treats unknown 4-digit MCCs
+# as "mainstream" for back-compat with internal callers; the API surface is
+# stricter so external callers cannot get silent no-op behaviour.
+API_REQUEST_MCCS = frozenset({
+    # Mainstream
+    "5411",  # Grocery
+    "5732",  # Electronics
+    "5734",  # Software / SaaS
+    "5812",  # Restaurants
+    "4814",  # Telecom
+    "7372",  # Online services
+    # High-risk (also in engine._HIGH_RISK_MCCS)
+    "5816",  # Digital goods / games
+    "5944",  # Jewelry
+    "5967",  # Direct marketing / adult
+    "7273",  # Dating services
+    "7995",  # Gambling
+})
+
+# Routing API training envelope for transaction amount. Above this, the
+# pattern-rule lifts and amount_modifier_thresholds in the YAMLs are
+# extrapolated rather than calibrated. Mirrors decline-recovery's $25K
+# guard so cross-service buyers see consistent envelope behaviour.
+# See audit v2 N2 (2026-04-26).
+API_AMOUNT_ENVELOPE_USD = 25_000.0
+
+
+def _validate_api_mcc(v):
+    """Validator shared by ApiSimulateRequest / ApiCompareRequest / QueryRequest.
+
+    Empty / None preserves the no-MCC path (engine treats as None).
+    Reject anything that isn't in API_REQUEST_MCCS with a 422 listing the
+    accepted set, matching the card_brand / card_type validation pattern.
+    """
+    if v is None:
+        return None
+    raw = str(v).strip()
+    if raw == "":
+        return None
+    if raw not in API_REQUEST_MCCS:
+        raise ValueError(
+            f"mcc '{raw}' is not accepted by this endpoint. "
+            f"Supported: {sorted(API_REQUEST_MCCS)}. "
+            "These match the routing simulator UI's MCC dropdown; "
+            "submit one of the listed codes or omit the field."
+        )
+    return raw
+
+
+def _validate_api_amount(v):
+    """Validator shared by ApiSimulateRequest / ApiCompareRequest / QueryRequest.
+
+    Reject amounts above the routing API's training envelope ($25,000) with
+    the same wording as decline-recovery's out_of_scope guard. Pydantic's
+    `le=10_000_000` field constraint stays in place as a hard upper bound;
+    this validator surfaces the soft envelope above which the model
+    extrapolates rather than interpolates.
+    """
+    if v is None:
+        return v
+    if float(v) > API_AMOUNT_ENVELOPE_USD:
+        raise ValueError(
+            f"Amount ${float(v):,.0f} exceeds the model's training envelope "
+            f"(${API_AMOUNT_ENVELOPE_USD:,.0f}). The routing simulator's "
+            "approval rates and decline-code distributions are calibrated for "
+            "card-present and card-not-present consumer transactions; for "
+            "wire-sized payments the projections are extrapolated rather than "
+            "calibrated. Send a smaller amount or treat the rankings as "
+            "directional only."
+        )
+    return v
+
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -228,6 +304,15 @@ class CompareRequest(_RejectCardholderData):
     amount: float = Field(..., gt=0, le=10_000_000)
     currency: str = "USD"
     use_3ds: bool = False
+    # Optional MCC — when provided, the engine applies an archetype-fit
+    # bucket (high-risk MCCs lift specialised orchestrators, mainstream
+    # MCCs slightly demote them). Defaults to None for backwards compat.
+    mcc: Optional[str] = Field(
+        None,
+        description="Merchant category code (4-digit ISO 18245). Optional. "
+                    "When supplied, ranking applies a high-risk vs mainstream "
+                    "MCC bucket adjustment to specialised archetypes.",
+    )
 
     _country_upper = field_validator("country")(classmethod(lambda cls, v: normalize_country(v)))
     _issuer_country_upper = field_validator("issuer_country")(classmethod(lambda cls, v: normalize_optional_country(v)))
@@ -269,7 +354,15 @@ class RetryResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 class RouteRecommendation(BaseModel):
-    """Response from /recommend-route — used by Payment Data Chatbot."""
+    """Response from /recommend-route — used by Payment Data Chatbot.
+
+    `defaults_applied` lists optional input fields (card_brand, card_type,
+    currency, use_3ds, mcc, issuer_country) that the caller omitted and the
+    server filled with platform defaults — same marker /compare and /query
+    return so clients have one consistent shape across all three ranking
+    endpoints (audit v4 M6, 2026-04-27).
+    """
     rankings: list[CompareResult]
     recommended_provider: str
     reasoning: str
+    defaults_applied: list[str] = Field(default_factory=list)

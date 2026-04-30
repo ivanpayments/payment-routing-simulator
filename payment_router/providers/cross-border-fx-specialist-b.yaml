@@ -13,6 +13,7 @@ three_ds:
   version_2_2_rate: 0.74
 
 card_type_modifiers:
+  # Cross-border FX: debit < credit by ~5pp (issuer cross-border debit blocks).
   credit: 1.00
   debit: 0.95
   prepaid: 0.83
@@ -59,9 +60,10 @@ supported_currencies:
   - MXN
 
 amount_modifier_thresholds:
+  # 2026-04-27 baseline lift: $1k tier eased from 0.94 to 0.96.
   "0": 1.00
-  "500": 0.97
-  "1000": 0.94
+  "500": 0.98
+  "1000": 0.96
   "5000": 0.86
   "10000": 0.80
   "20000": 0.72
@@ -90,7 +92,7 @@ countries:
   FR:
     base: 0.88
     card_modifiers:
-      amex: 0.92
+      amex: 0.98
       mastercard: 0.99
       visa: 1.00
     three_ds:
@@ -157,7 +159,7 @@ countries:
       frictionless_rate: 0.86
       version_2_2_rate: 0.74
   US:
-    base: 0.84
+    base: 0.89
     card_modifiers:
       amex: 1.01
       mastercard: 1.00
@@ -167,44 +169,63 @@ countries:
       frictionless_rate: 0.88
       version_2_2_rate: 0.74
   CA:
-    base: 0.85
+    base: 0.89
     card_modifiers:
       amex: 1.00
       mastercard: 1.00
       visa: 1.00
   AU:
-    base: 0.81
+    base: 0.88
     card_modifiers:
       amex: 1.04
       mastercard: 0.98
       visa: 1.00
   SG:
-    base: 0.76
+    base: 0.87
     card_modifiers:
       amex: 1.02
       mastercard: 0.99
       visa: 1.00
   JP:
-    base: 0.78
+    base: 0.88
     card_modifiers:
       amex: 1.05
       mastercard: 1.01
       visa: 0.98
   BR:
-    # Domestic BR: cross-border-fx takes a penalty on domestic corridors.
-    base: 0.61
+    # Per pattern AD040: FX-specialist domestic within 2pp of global-acquirer.
+    # Held at 0.79 to keep FX-b BR Visa empirical >=5pp below the BR-tuned
+    # regional bank (regional-bank-processor-a at 0.89) per the
+    # test_br_domestic_regional_bank_beats_crossborder_fx invariant.
+    base: 0.79
     card_modifiers:
-      amex: 0.86
+      amex: 0.97
       mastercard: 1.01
       visa: 0.99
   AE:
-    base: 0.72
+    # FX-b domestic AE within 2pp of GA AE — lift 0.72 → 0.85.
+    base: 0.85
     card_modifiers:
-      amex: 1.07
+      amex: 1.05
       mastercard: 1.02
       visa: 0.97
   ZA:
-    base: 0.71
+    # FX-b domestic ZA within 2pp of GA ZA — lift 0.71 → 0.80.
+    base: 0.80
     card_modifiers:
       mastercard: 0.94
       visa: 1.02
+  # 2026-04-27 baseline lift: explicit MX / IN entries replace the
+  # base_approval_rate * 0.95 fallback that anchored sweep medians low.
+  MX:
+    base: 0.86
+    card_modifiers:
+      amex: 0.97
+      mastercard: 1.00
+      visa: 1.00
+  IN:
+    base: 0.86
+    card_modifiers:
+      amex: 1.02
+      mastercard: 1.02
+      visa: 0.97
